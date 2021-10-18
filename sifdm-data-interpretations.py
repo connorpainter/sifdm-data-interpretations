@@ -2,7 +2,7 @@
 ##
 ## Created by Connor Painter on 9/27/21 to do elementary analysis on the 
 ## outputs of SIFDM MATLAB code by Philip Mocz with Python.
-## Last updated: 10/15/21
+## Last updated: 10/18/21
 
 
 
@@ -157,7 +157,7 @@ class Sim():
         fps = kwargs.pop('fps', 20)
         
         data = self.get(q, i)
-        data = np.array([ (np.sum(data[t], axis=axis) if project else getSlice(data[t], axis, iSlice)) for t in range(len(data)) ])
+        data = np.array([ (getProjection(data[t], axis) if project else getSlice(data[t], axis, iSlice)) for t in range(len(data)) ])
         if log10: data = np.log10(data)
         
         fig, ax = plt.subplots(dpi=dpi)
@@ -466,7 +466,7 @@ class Snap():
         
         data = None
         if project:
-            data = np.sum(self.get(q, i=None), axis=axis)
+            data = getProjection(self.get(q, i=None), axis)
             if log10: data = np.log10(data)
         else:
             data = self.get(q, i=i, log10=log10)
@@ -642,6 +642,13 @@ def getSlice(data, axis, iSlice=None):
     if axis==2: data = data[:,:,iSlice]
     
     return data
+
+
+
+## Given 3-dimensional data, returns a 2-d projection along an axis.
+def getProjection(data, axis):
+    
+    return np.max(data, axis=axis)
 
 
 
