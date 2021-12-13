@@ -2,7 +2,7 @@
 ##
 ## Created by Connor Painter on 9/27/21 to do elementary analysis on the 
 ## outputs of SIFDM MATLAB code by Philip Mocz with Python.
-## Last updated: 10/28/21
+## Last updated: 12/08/21
 
 
 
@@ -15,6 +15,8 @@ import os
 import time
 import itertools
 from scipy.optimize import curve_fit
+from scipy.interpolate import UnivariateSpline
+from scipy.signal import find_peaks
 mpl.rcParams['mathtext.fontset'] = 'stix'
 mpl.rcParams['font.family'] = 'STIXGeneral'
 
@@ -33,22 +35,25 @@ mpl.rcParams['font.family'] = 'STIXGeneral'
 ## Folder setup
 
 
-## f15 = Inf; L = 20; T = 4; Nout = 400; N (res) = 100
-d1 = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/fInfL20T4n400r100"
 
-## f15 = 4; L = 20; T = 4; Nout = 400; N (res) = 100
-d2 = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/f4L20T4n400r100"
+## f15 = 2.75; L = 20; T = 16; Nout = 10; N (res) = 100
+d2_75 = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/f2.75L20T16n1600r100"
 
-## f15 = 2; L = 20; T = 4; Nout = 400; N (res) = 100
-d3 = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/f2L20T4n400r100"
+## f15 = Inf.; L = 20; T = 16 Nout = 1600; N (res) = 100
+dInf = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/fInfL20T16n1600r100"
 
-## f15 = 1; L = 20; T = 4; Nout = 400; N (res) = 100
-d4 = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/f1L20T4n400r100"
+## f15 = 4.00; L = 20; T = 16; Nout = 1600; N (res) = 100
+d4 = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/f4L20T16n1600r100"
+
+## f15 = 2.00; L = 20; T = 16; Nout = 1600; N (res) = 100
+d2 = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/f2L20T16n1600r100"
+
+## f15 = 1.00; L = 20; T = 16; Nout = 1600; N (res) = 100
+d1 = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/f1L20T16n1600r100"
 
 
 
-
-folders = [d1, d2, d3, d4]
+folders = [dInf, d4, d2_75, d2, d1]
 
 
 
@@ -57,7 +62,8 @@ folders = [d1, d2, d3, d4]
 
 
 createImgSubfolders = True
-saveToParent = os.getcwd()
+saveToParent = os.path.join(os.getcwd(), "Saved Figures")
+onlyNameF15 = False
 
 
 
@@ -66,34 +72,39 @@ saveToParent = os.getcwd()
 
 
 Q = {'':'', 
-     'snapdir':'Full Path of Snap-Enclosing Directory', 
-     'num':'Snap Number', 'filename':'Snap File Name', 
-     'path':'Full Path of Snap', 
-     'dir':'Snap-Enclosing Directory', 
+     'snapdir':'Path to Snapshot-Enclosing Directory', 
+     'num':'Snapshot Number', 'filename':'Snapshot Filename', 
+     'path':'Path to Snapshot', 
+     'dir':'Snapshot-Enclosing Directory', 
      'psi':'Wavefunction', 
-     't':'Current Time', 
-     'm22':'Mass [10^-22 eV]', 
-     'm':'Mass', 
-     'f15':'Strong-CP Energy Decay Constant [10^15 GeV]', 
-     'f':'Strong-CP Energy Decay Constant', 
+     't':'Time', 
+     'm22':'Normalized Particle Mass',
+     'm':'Particle Mass', 
+     'f15':'Normalized Self-interaction Parameter', 
+     'f':'Self-interaction Parameter', 
      'a_s':'s-scattering Length', 
-     'critical_M_sol':'Critical Soliton Mass', 
-     'critical_rho0':'Critical Central Soliton Density', 
-     'critical_r_c':'Critical Soliton Core Radius',
-     'critical_beta':'Critical Beta',
-     'Lbox':'Simulation Box Length', 
+     'crit_M_sol':'Critical Soliton Mass', 
+     'crit_rho0':'Critical Soliton Central Density', 
+     'crit_r_c':'Critical Soliton Core Radius',
+     'crit_beta':'Critical Beta',
+     'Lbox':'Box Side Length', 
      'N':'Resolution', 
      'dx':'Grid Spacing',
      'phase':'Wavefunction Phase', 
      'rho':'Density', 
      'rhobar':'Mean Density', 
-     'rho0':'Central Soliton Density', 
-     'i0':'Maximum Density Index', 
-     'beta':'Soliton Stability Constant (Beta)',
+     'rhoMax':'Maximum Density',
+     'iMax':'Maximum Density Index',
+     'profile':'Density Profile',
+     'rho0':'Soliton Central Density Fit', 
+     'delta':'Density Profile Delta Factor',
+     'solitonGOF':'Goodness of Fit to Soliton Profile',
+     'beta':'Beta (Soliton Stability Parameter)',
      'r_c':'Soliton Core Radius', 
      'M_sol':'Soliton Mass', 
-     'critical_f':'Critical Strong-CP Energy Decay Constant for Collapse',
-     'tailindex':'Index of Power Law Fit to Density Profile Tail', 
+     'crit_f15':'Critical Self-interaction Parameter',
+     'tailindex':'Density Profile Tail Index Fit',
+     'tailGOF':'Goodness of Fit to Density Profile Tail',
      'V':'Potential', 
      'v':'Madelung Velocity', 
      'v2':'Madelung Velocity Magnitude Squared', 
@@ -105,7 +116,7 @@ Q = {'':'',
      'E':'Total Energy',
      'L':'Angular Momentum', 
      'L2':'Angular Momentum Magnitude Squared'}
-Q0 = ['t', 'm22', 'm', 'f15', 'f', 'a_s', 'critical_M_sol', 'critical_rho0', 'critical_r_c', 'critical_beta', 'Lbox', 'N', 'dx', 'rhobar', 'rho0', 'beta', 'r_c', 'M_sol', 'critical_f', 'tailindex', 'M', 'W', 'Kv', 'Krho', 'KQ', 'L2']
+Q0 = ['t', 'm22', 'm', 'f15', 'f', 'a_s', 'crit_M_sol', 'crit_rho0', 'crit_r_c', 'crit_beta', 'Lbox', 'N', 'dx', 'rhobar', 'rho0', 'beta', 'r_c', 'M_sol', 'crit_f15', 'tailindex', 'M', 'W', 'Kv', 'Krho', 'KQ', 'L2']
 Q1 = ['L', 'i0']
 Q2 = []
 Q3 = ['psi', 'phase', 'rho', 'V', 'v2']
@@ -115,27 +126,28 @@ U = {'length':'[kpc]', 'mass':r"[$M_{\odot}$]", 'energy':r"[$M_{\odot}\mathrm{(k
 C = {'phase':'bwr', 'rho':'inferno', 'V':'cividis', 'v':'hot', 'v2':'hot'}
 LTX = {'psi':r"$\Psi$",
        't':r"$t$",
-       'm22':r"$\frac{m}{(10^{-22} \mathrm{eV})}$",
+       'm22':r"$\frac{m}{10^{-22}\ \mathrm{eV}}$",
        'm':r"$m$",
-       'f15':r"$\frac{f}{(10^{15} \mathrm{eV})}$",
+       'f15':r"$\frac{f}{10^{15}\ \mathrm{eV}}$",
        'f':r"$f$",
        'a_s':r"$a_s$",
-       'critical_M_sol':r"$M_{\mathrm{crit}}$",
-       'critical_rho0':r"$\rho_{\mathrm{crit}}$",
-       'critical_r_c':r"$r_{\mathrm{crit}}$",
-       'critical_beta':r"$\beta_{\mathrm{crit}}$",
+       'crit_M_sol':r"$M_{\mathrm{crit}}$",
+       'crit_rho0':r"$\rho_{\mathrm{crit}}$",
+       'crit_r_c':r"$r_{\mathrm{crit}}$",
+       'crit_beta':r"$\beta_{\mathrm{crit}}$",
        'Lbox':r"$L_{box}$",
        'N':r"$N$",
        'dx':r"$\Delta x$",
        'phase':r"$\mathrm{arg}(\Psi)$",
        'rho':r"$\rho$",
-       'rhobar':r"$\bar{rho}$",
+       'rhobar':r"$\bar{\rho}$",
+       'profile':r"$\rho(r)$",
        'rho0':r"$\rho_0$",
        'i0':r"$i_0$",
        'beta':r"$\beta$",
        'r_c':r"$r_c$",
        'M_sol':r"$M_{\mathrm{sol}}$",
-       'critical_f':r"$f_{\mathrm{crit}}$",
+       'crit_f15':r"$f_{\mathrm{crit}}$",
        'tailindex':r"$n_{\mathrm{tail}}$",
        'V':r"$V$",
        'v':r"$v$",
@@ -166,18 +178,22 @@ pi = np.pi
 
 
 
-## Conveniently extracts and calculates data from all snapshots in a folder.
-## Attributed functions pertain to entire simulation as opposed to one frame.
-## Snapshots stored as a list of Snap objects (below) as sim.snaps.
-## Snap parameter loadall is toggled false, but data accumulates as you need it.
 class Sim():
     
-    def __init__(self, snapdir):
+    """
+    Extracts and calculates data from all snapshots in a folder.
+    - snapdir: path to output directory
+    - lite: do not load psi at initialization
+    """
+    
+    def __init__(self, snapdir, lite=True):
         
         self.snapdir = snapdir
         self.dir = os.path.basename(snapdir)
         
-        self.snaps = [Snap(snapdir, i) for i in range(len(list(os.scandir(snapdir))))]
+        print(f"Loading {lite*'(lite) '}Snap objects from folder {self.dir}...")
+        
+        self.snaps = [Snap(snapdir, i, lite=lite) for i in range(len(list(os.scandir(snapdir))))]
         self.t = np.array([s.t for s in self.snaps])
         self.Nout = len(self.snaps)
         
@@ -191,34 +207,48 @@ class Sim():
         self.N = s.N
         self.dx = s.dx
         
-        self.critical_M_sol = s.critical_M_sol
-        self.critical_rho0 = s.critical_rho0
-        self.critical_r_c = s.critical_r_c
-        self.critical_beta = s.critical_beta
+        self.crit_M_sol = s.crit_M_sol
+        self.crit_rho0 = s.crit_rho0
+        self.crit_r_c = s.crit_r_c
+        self.crit_beta = s.crit_beta
         
         return
     
     
     
-    ## Retrieves a quantity (along index kwargs) from any snaps in the simulation.
-    def get(self, q, snaps=None, axis=None, project=False, i=None, iSlice=None, log10=False):
+    def get(self, q, snaps=None, axis=None, project=False, i=None, iSlice=None, log10=False, **kwargs):
+        
+        """
+        Retrieves a quantity (along index kwargs) from any snaps in the simulation.
+        - q: name of quantity
+        - snaps: list of snapshot numbers
+        - index kwargs (axis, project, i, iSlice): specify index of multi-dimensional quantity
+        - log10: return log (base 10) of quantity
+        """
         
         if snaps is None: snaps = np.arange(0,len(self.snaps))
         
         data = []
         for j in range(len(snaps)):
             
-            if j%(int(len(snaps)/4))==0: print(f"Retrieving {Q[q]} from Snap {snaps[j]}...")
+            if j%50==0: print("Retrieving {} from Snap {} ({:.2%})...".format(Q[q], snaps[j], j/len(snaps)))
             
             s = self.snaps[snaps[j]]
-            data.append(s.get(q, axis, project, i, iSlice, log10))
+            data.append(s.get(q, axis, project, i, iSlice, log10, **kwargs))
         
         return data
     
     
     
-    ## Plots the evolution of any scalar-valued quantities.
     def evolutionPlot(self, q, i=None, log10=False, ax=None, **kwargs):
+        
+        """
+        Plots the evolution of any scalar-valued quantities.
+        - q: name of quantity(s)
+        - i: index of multi-dimensional quantity
+        - log10: plot log (base 10) of quantity
+        - ax: axes on which to plot
+        """
         
         figsize = kwargs.pop('figsize', (9,3))
         dpi = kwargs.pop('dpi', 200)
@@ -226,34 +256,37 @@ class Sim():
         filename = kwargs.pop('filename', None)
         c = kwargs.pop('c', None)
         iterproduct = kwargs.pop('iterproduct', False)
-        snaps = kwargs.pop('snaps', np.arange(0,len(self.snaps)))
+        eo = kwargs.pop('eo', 1)
+        snaps = kwargs.pop('snaps', np.arange(0,len(self.snaps),eo))
         legendkws = kwargs.pop('legendkws', {'fontsize':'small'})
+        smooth = kwargs.pop('smooth', None)
         
-        combos = combineArguments(iterproduct, q, i=i, log10=log10, c=c)
-        qs = [combo[0] for combo in combos]
+        combos = combineArguments(iterproduct, q, i=i, c=c, smooth=smooth)
+        Qs = list(set([Q[combo[0]] for combo in combos]))
         
-        if ax is None:
-            plt.figure(figsize=figsize, dpi=dpi)
-            ax = plt.gca()
+        if ax is None: fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
         
         data = np.zeros((len(combos), len(snaps)))
         t = [self.t[s] for s in snaps]
         for j in range(len(combos)):
             
-            print(f"Plotting quantity {j+1}: {Q[qs[j]]}...")
+            q, i, c, smooth = combos[j]
             
-            q, i, log10, c = combos[j]
-            data[j] = self.get(q, snaps=snaps, i=i, log10=log10)
-            ax.plot(t, data[j], c=c, label=Q[q]+(i is not None)*f" {i}", **kwargs)
+            print(f"Plotting quantity {j+1}: {Q[q]}...")
+            
+            data[j] = self.get(q, snaps=snaps, i=i)
+            if isinstance(smooth, int): data[j] = SMA(data[j], smooth)
+            
+            label = Q[q] + (i is not None)*f" {i}" + isinstance(smooth,int)*f" (SMA = {smooth})"
+            ax.plot(t, data[j], c=c, label=label, **kwargs)
         
         ylabel = kwargs.pop('ylabel', ("Multiple Quantities" if len(combos)>1 else Q[q] + (i is not None)*f" {i}" + f" {U.get(U.get(q), '')}"))
-        ax.set(xlabel=f"Time {U['time']}", ylabel=ylabel, title=r"($f_{15} = $" + rf"${self.f15}$)")
+        ax.set(xlabel=f"Time {U['time']}", ylabel=ylabel, title=r"($f_{15} = $" + rf"${self.f15}$)", yscale=['linear','log'][log10])
         plt.grid(True)
         plt.legend(**legendkws)    
         
         if save: 
             if filename is None:
-                Qs = [Q[q] for q in qs]
                 if len(Qs)==1: Qs = Qs[0]
                 filename = f"{Qs} Evolution Plot"
             plt.savefig(self.getPathAndName(filename, ".pdf"), transparent=True) 
@@ -262,8 +295,14 @@ class Sim():
     
     
     
-    ## Animates the evolution of any quantities defined throughout the box.
     def evolutionMovie(self, q, axis=1, project=False, i=None, iSlice=None, log10=False, **kwargs):
+        
+        """
+        Animates the evolution of any quantities defined throughout the box.
+        - q: name of quantity(s)
+        - index kwargs (axis, project, i, iSlice): specify index of multi-dimensional quantity
+        - log10: return log (base 10) of quantity
+        """
         
         dpi = kwargs.pop('dpi', 200)
         wspace = kwargs.pop('wspace', 0.3)
@@ -274,16 +313,17 @@ class Sim():
         clims = kwargs.pop('clims', [None,None])
         climfactors = kwargs.pop('climfactors', [0,1])
         cmap = kwargs.pop('cmap', None)
-        snaps = kwargs.pop('snaps', np.arange(0,len(self.snaps)))
+        eo = kwargs.pop('eo', 1)
+        snaps = kwargs.pop('snaps', np.arange(0,len(self.snaps),eo))
         
         combos = combineArguments(iterproduct, q, axis, project, i, iSlice, log10, climfactors, clims, cmap)
         combos = [np.array(combo, dtype=object) for combo in combos]
-        qs = [combo[0] for combo in combos]
+        Qs = list(set([Q[combo[0]] for combo in combos]))
         
         clims = []
         for c in range(len(combos)):
             
-            print(f"Computing color limits for plot {c+1}...")
+            print(f"Computing color limits for plot {c+1} ({Q[combos[c][0]]})...")
             
             if combos[c][-2]==[None,None] or combos[c][-2]==[]:
                 _q, _axis, _project, _i, _iSlice, _log10, climfactors, _1, _2 = combos[c]
@@ -299,7 +339,7 @@ class Sim():
         
         def animate(j):
             
-            if j%10==0: print(f"Animating frame {j+1}/{len(snaps)}")
+            if j%10==0: print("Animating frame {}... ({:.2%})".format(j+1, (j+1)/len(snaps)))
             
             nonlocal colorbarmade
             
@@ -316,19 +356,23 @@ class Sim():
         
         if save: 
             if filename is None:
-                Qs = [Q[q] for q in qs]
                 if len(Qs)==1: Qs = Qs[0]
-                filename = f"{Qs} Evolution Plot"
+                filename = f"{Qs} Evolution Movie"
             anim.save(self.getPathAndName(filename, ".gif"), writer=writer)
         
         return
     
     
     
-    ## Animates the evolution of the soliton density and its radial profile.
-    def densityProfileMovie(self, rmin=None, rmax=None, shells=20, normalize=True, neighbors=1, rands=1e5, fit=False, **kwargs):
+    def densityProfileMovie(self, with_slice=True, **kwargs):
         
-        figsize = kwargs.pop('figsize', (8,4))
+        """
+        Animates the evolution of the soliton density and its radial profile.
+        - rmin, rmax, shells: radial range and resolution
+        - normalize: animate rho/rho_0 by r/r_c
+        """
+        
+        figsize = kwargs.pop('figsize', ((8,4) if with_slice else (4,4)))
         dpi = kwargs.pop('dpi', 200)
         clims = kwargs.pop('clims', [5,10])
         climfactors = kwargs.pop('climfactors', [0,1])
@@ -336,29 +380,33 @@ class Sim():
         filename = kwargs.pop('filename', "Density Profile Movie")
         save = kwargs.pop('save', True)
         fps = kwargs.pop('fps', 10)
-        snaps = kwargs.pop('snaps', np.arange(0,len(self.snaps)))
+        eo = kwargs.pop('eo', 1)
+        snaps = kwargs.pop('snaps', np.arange(0,len(self.snaps),eo))
         
         if clims is None: 
             print("Computing color limits for density animation...")
             clims = getColorLimits(self.get('rho', snaps=snaps), climfactors)
         
-        fig, ax = plt.subplots(1, 2, figsize=figsize, dpi=dpi)
+        fig, ax = plt.subplots(1, (2 if with_slice else 1), figsize=figsize, dpi=dpi)
+        if not hasattr(ax, '__len__'): ax = [ax]
         plt.subplots_adjust(wspace=0.3)
         colorbarmade = False
         
         def animate(i):
             
-            if i%10==0: print(f"Animating frame {i+1}/{len(snaps)}")
+            if i%10==0: print("Animating frame {}... ({:.2%})".format(i+1, (i+1)/len(snaps)))
         
             nonlocal colorbarmade
             
-            ax[0].clear()
-            ax[1].clear()
-            
             s = snaps[i]
-            self.snaps[s].slicePlot('rho', axis, iSlice='max', ax=ax[0], log10=True, colorbar=(not colorbarmade), clims=clims, **kwargs)
-            self.snaps[s].densityProfile(rmin, rmax, shells, normalize, neighbors, rands, fit, False, ax[1], **kwargs)
-            colorbarmade = True
+            
+            ax[-1].clear()
+            self.snaps[s].densityProfile(ax=ax[-1], **kwargs)
+            
+            if with_slice:
+                ax[0].clear()
+                self.snaps[s].slicePlot('rho', axis, iSlice='max', ax=ax[0], log10=True, colorbar=(not colorbarmade), clims=clims)
+                colorbarmade = True
             
             return
         
@@ -370,10 +418,100 @@ class Sim():
     
     
     
-    ## Retrieves folder path based on saving preferences and organizes given filename + extension.
+    def profileTailOverlays(self, snaps=None, rmin=1, rmax=8, shells=200, **kwargs):
+        
+        """
+        Overlays density profile tails, colored by time.
+        - snaps: list of snapshot numbers
+        - rmin, rmax, shells: radial domain and resolution
+        """
+        
+        dpi = kwargs.pop('dpi', 200)
+        cmap = kwargs.pop('cmap', 'brg')
+        eo = kwargs.pop('eo', 1)
+        save = kwargs.pop('save', True)
+        filename = kwargs.pop('filename', "Profile Tail Overlays")
+        if snaps is None: snaps = np.arange(int(self.Nout/4), self.Nout, eo)
+        
+        fig, ax = plt.subplots(dpi=dpi)
+        cmap = mpl.cm.get_cmap(cmap)
+        norm = mpl.colors.Normalize(self.snaps[snaps[0]].t, self.snaps[snaps[-1]].t)
+        for i in range(len(snaps)):
+            
+            s = self.snaps[snaps[i]]
+            
+            if i%10==0: print("Plotting tail from Snap {}... ({:.2%})".format(snaps[i], i/len(snaps)))
+            
+            log10r = np.linspace(np.log10(rmin), np.log10(rmax), shells)
+            profile = s.get('profile')
+            ax.loglog(10**log10r, 10**profile(log10r), c=cmap(norm(s.t)), **kwargs)
+        
+        ax.set(xlabel=rf"$r$ {U['length']}", ylabel=rf"$\rho$ {U['density']}", title=r"($f_{15}$" + rf"$ = {self.f15}$)")
+        plt.grid(True)
+        cbar = fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap))
+        cbar.set_label("Time " + U['time'])
+        
+        if save: plt.savefig(self.getPathAndName(filename, ".pdf"), transparent=True)
+        
+        return
+    
+    
+    
+    def smoothTailEvolutionPlot(self, rmin=1, rmax=8, shells=200, neighbors=1, **kwargs):
+        
+        """
+        Plots evolution of power law index of density profile tail, smoothed by SMA of tail density values (not SMA of the index).
+        - rmin, rmax, shells: radial domain and resolution
+        - neighbors: neighbors to consider in moving average
+        """
+        
+        figsize = kwargs.pop('figsize', (9,3))
+        dpi = kwargs.pop('dpi', 200)
+        snaprange = kwargs.pop('snaprange', (0,self.Nout))
+        save = kwargs.pop('save', True)
+        filename = kwargs.pop('filename', f"{Q['tailindex']} (Smooth - {neighbors}) Evolution Plot")
+        
+        snaps = np.arange(snaprange[0], snaprange[1])
+        t = self.t[snaps][neighbors:-neighbors]
+        r = np.logspace(np.log10(rmin), np.log10(rmax), shells)
+        rhos = np.zeros((len(snaps), shells))
+        
+        for i in range(len(snaps)):    
+            if i%10==0: print("Retrieving density profile tail from Snap {}... ({:.2%})".format(snaps[i], i/len(snaps)))
+            profile = self.snaps[snaps[i]].get('profile')
+            rhos[i] = 10**profile(np.log10(r))
+            
+        
+        smooth_rhos = np.zeros((len(snaps)-2*neighbors, shells))
+        for i in range(len(smooth_rhos)): smooth_rhos[i] = np.mean(rhos[i:i+2*neighbors+1], axis=0)
+        
+        def log10PowerLaw(log10r, log10A, n): return log10A + n*log10r
+        
+        ns = []
+        for i in range(len(smooth_rhos)):
+            fit = curve_fit(log10PowerLaw, np.log10(r), np.log10(smooth_rhos[i]), p0=[0,-3])
+            ns.append(fit[0][1])
+        
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        ax.plot(t, ns, **kwargs)
+        ax.set(xlabel=f"Time {U['time']}", ylabel=r"$n_{\mathrm{tail}}$"+f" Smoothened over {neighbors} Point(s)")
+        ax.grid()
+        
+        if save: plt.savefig(self.getPathAndName(filename, ".pdf"), transparent=True)
+        
+        return t, ns
+    
+    
+    
     def getPathAndName(self, filename, ext):
         
-        path = os.path.join(saveToParent, self.dir + " Images")
+        """
+        Retrieves folder path based on saving preferences and creates filename.
+        - filename: name to assign file
+        - ext: file extension
+        """
+        
+        path = createImageSubfolders(parent=saveToParent, folders=[self.snapdir], mkdir=False)[0]
         if not os.path.isdir(path): path = saveToParent
         path = os.path.join(path, self.dir + " - " + filename + ext)
         
@@ -381,18 +519,17 @@ class Sim():
 
 
 
-## Conveniently extracts and calculates data from one snapshot.
-## Attributed functions pertain to one frame, not the whole simulation.
-## Analogous to Philip's READSNAP.m helper function.
-## Toggle loadall to choose how much data to extract from snapshot initially.
-## get(): existence of attribute is checked first, then calculated and stored 
-##        if necessary.
 class Snap():
     
-    ## Initializes Snap object.
-    ## NOTE: Attributes within loadall clause cannot be referenced unless loadall
-    ##       is True at instantiation or until attribute is retrived via get().
-    def __init__(self, snapdir, snapnum, loadall=False):
+    """
+    Extracts and calculates data from one snapshot.
+    - snapdir: path to output directory
+    - snapnum: assigned number of snapshot
+    - lite: do not load psi at initialization
+    - loadall: load every supported attribute at initialization
+    """
+    
+    def __init__(self, snapdir, snapnum, lite=False, loadall=False):
         
         self.snapdir = snapdir
         self.num = snapnum
@@ -402,34 +539,36 @@ class Snap():
         self.path = snappath
         self.dir = os.path.basename(snapdir)
         
-        self.psi = np.array(f['psiRe']) + 1j*np.array(f['psiIm'])
+        if not lite: self.psi = np.array(f['psiRe'], dtype=np.float32) + 1j*np.array(f['psiIm'], dtype=np.float32)
         self.t = float(f['time'][0])
         self.m22 = float(f['m22'][0])
         self.m = self.m22 * 8.96215327e-89
         self.f15 = float(self.dir[self.dir.find('f')+1:self.dir.find('L')])
         self.f = self.f15 * 8.05478166e-32
-        self.a_s = hbar*c**3*self.m/(32*pi*self.f**2)                         
+        self.a_s = formula('a_s', m=self.m, f=self.f)                  
         self.Lbox = float(f['Lbox'][0])
-        self.N = np.shape(self.psi)[0]
+        self.N = int(self.dir[self.dir.find('r')+1:])
         self.dx = self.Lbox/self.N
         
-        self.critical_M_sol = (hbar/np.sqrt(G*self.m*self.a_s) if self.a_s != 0 else np.inf)
-        self.critical_rho0 = 1.2e9*self.m22**2*self.f15**4
-        self.critical_r_c = 0.18/(self.m22*self.f15)
-        self.critical_beta = 0.3
+        self.crit_M_sol = (formula('crit_M_sol', m=self.m, a_s=self.a_s) if self.a_s != 0 else np.inf)
+        self.crit_rho0 = formula('crit_rho0', m22=self.m22, f15=self.f15)
+        self.crit_r_c = formula('crit_r_c', m22=self.m22, f15=self.f15)
+        self.crit_beta = 0.3
         
         self.all_loaded = loadall
         if loadall:
             self.phase = np.angle(self.psi)
             self.rho = np.abs(self.psi)**2
             self.rhobar = np.mean(self.rho)
-            self.rho0 = np.max(self.rho)
-            self.i0 = np.array(np.unravel_index(np.argmax(self.rho), self.rho.shape))
-            self.beta = 1.6e-12/(self.m22)*self.rho0**(1/2) * hbar*c**5/(32*pi*G*self.f**2)
-            self.r_c = (self.rho0/3.1e6)**(-1/4)*(2.5/self.m22)**(1/2)
-            self.M_sol = 11.6*self.rho0*self.r_c**3
-            self.critical_f = (self.rho0/1.2e9)**(1/4) * self.m22**(-1/2)
-            self.tailindex = self.fitProfileTail(plot=False)[0][1]
+            self.profile = self.densityProfile()
+            self.rho0, self.delta, self.solitonGOF = self.fitSolitonProfile()
+            self.rhoMax = np.max(self.rho)
+            self.iMax = np.array(np.unravel_index(np.argmax(self.rho), self.rho.shape))
+            self.beta = formula('beta', m22=self.m22, f=self.f, rho0=self.rho0)
+            self.r_c = formula('r_c', m22=self.m22, rho0=self.rho0, delta=self.delta)
+            self.M_sol = formula('M_sol', rho0=self.rho0, r_c=self.r_c)
+            self.crit_f15 = formula('crit_f15', m22=self.m22, rho0=self.rho0, delta=self.delta)
+            self.tailindex, self.tailGOF = self.fitTailProfile(plot=False)
             
             ## Get the potential.
             k = (2*pi/self.Lbox) * np.arange(-self.N/2, self.N/2)
@@ -469,8 +608,18 @@ class Snap():
     
     
     
-    ## Retrieves a quantity (along index kwargs) from the parent snap. 
-    def get(self, q, axis=None, project=False, i=None, iSlice=None, log10=False):
+    def __str__(self): return f"Snapshot {self.num} from output folder {self.dir}."
+    
+    
+     
+    def get(self, q, axis=None, project=False, i=None, iSlice=None, log10=False, **kwargs):
+        
+        """
+        Retrieves a quantity (along index kwargs) from the parent snap.
+        - q: name of quantity
+        - index kwargs (axis, project, i, iSlice): specify index of multi-dimensional quantity
+        - log10: return log (base 10) of quantity
+        """
         
         data = None
         
@@ -513,38 +662,50 @@ class Snap():
         if q=='filename': data = self.filename
         if q=='path': data = self.path
         if q=='dir': data = self.dir
-        if q=='psi': data = self.psi
         if q=='t': data = self.t
         if q=='m22': data = self.m22
         if q=='m': data = self.m
         if q=='f15': data = self.f15
         if q=='f': data = self.f
         if q=='a_s': data = self.a_s                         
-        if q=='critical_M_sol': data = self.critical_M_sol
-        if q=='critical_rho0': data = self.critical_rho0
-        if q=='critical_r_c': data = self.critical_r_c
-        if q=='critical_beta': data = self.critical_beta
+        if q=='crit_M_sol': data = self.crit_M_sol
+        if q=='crit_rho0': data = self.crit_rho0
+        if q=='crit_r_c': data = self.crit_r_c
+        if q=='crit_beta': data = self.crit_beta
         if q=='Lbox': data = self.Lbox
         if q=='N': data = self.N
         if q=='dx': data = self.dx
         
+        if q=='psi':
+            try: data = self.psi if full else self.psi[index]
+            except:
+                f = h5py.File(self.path, 'r')
+                psiRe = f['psiRe']
+                psiIm = f['psiIm']
+                if full:
+                    self.psi = np.array(psiRe) + 1j*np.array(psiIm)
+                    data = self.psi
+                else:
+                    data = np.array(psiRe[index]) + 1j*np.array(psiIm[index])
         if q=='phase':
             try: data = self.phase if full else self.phase[index]
             except:
                 if full:
-                    self.phase = np.angle(self.psi)
+                    psi = self.get('psi')
+                    self.phase = np.angle(psi)
                     data = self.phase
                 else:
-                    psi = self.psi[index]
+                    psi = self.get('psi', i=index)
                     data = np.angle(psi)
         if q=='rho': 
             try: data = self.rho if full else self.rho[index]
             except: 
                 if full:
-                    self.rho = np.abs(self.psi)**2
+                    psi = self.get('psi')
+                    self.rho = np.abs(psi)**2
                     data = self.rho
                 else:
-                    psi = self.psi[index]
+                    psi = self.get('psi', i=index)
                     data = np.abs(psi)**2
         if q=='rhobar': 
             try: data = self.rhobar 
@@ -552,13 +713,33 @@ class Snap():
                 rho = self.get('rho')
                 self.rhobar = np.mean(rho)
                 data = self.rhobar
-        if q in ['rho0', 'i0']:
-            try: data = self.rho0 if q=='rho0' else self.i0
+        if q in ['rhoMax', 'iMax']:
+            try: data = self.rhoMax if q=='rhoMax' else self.iMax
             except:
                 rho = self.get('rho')
-                self.i0 = np.unravel_index(np.argmax(rho), rho.shape)
-                self.rho0 = rho[self.i0]
-                data = self.rho0 if q=='rho0' else self.i0
+                self.iMax = np.unravel_index(np.argmax(rho), rho.shape)
+                self.rhoMax = rho[self.iMax]
+                data = self.rhoMax if q=='rhoMax' else self.iMax
+        if q=='profile':
+            try: data = self.profile
+            except:
+                self.profile = self.densityProfile(**kwargs)
+                data = self.profile
+        if q=='rho0':
+            try: data = self.rho0
+            except:
+                self.rho0, self.delta, self.solitonGOF = self.fitSolitonProfile()
+                data = self.rho0
+        if q=='delta':
+            try: data = self.delta
+            except:
+                self.rho0, self.delta, self.solitonGOF = self.fitSolitonProfile()
+                data = self.delta
+        if q=='solitonGOF':
+            try: data = self.solitonGOF
+            except:
+                self.rho0, self.delta, self.solitonGOF = self.fitSolitonProfile()
+                data = self.solitonGOF
         if q=='beta':
             try: data = self.beta
             except:
@@ -569,7 +750,8 @@ class Snap():
             try: data = self.r_c
             except:
                 rho0 = self.get('rho0')
-                self.r_c = (rho0/3.1e6)**(-1/4)*(2.5/self.m22)**(1/2)
+                delta = self.get('delta')
+                self.r_c = formula('r_c', m22=self.m22, rho0=rho0, delta=delta)
                 data = self.r_c
         if q=='M_sol':
             try: data = self.M_sol
@@ -578,17 +760,23 @@ class Snap():
                 r_c = self.get('r_c')
                 self.M_sol = 11.6*rho0*r_c**3
                 data = self.M_sol
-        if q=='critical_f':
-            try: data = self.critical_f
+        if q=='crit_f15':
+            try: data = self.crit_f15
             except:
                 rho0 = self.get('rho0')
-                self.critical_f = (rho0/1.2e9)**(1/4) * self.m22**(-1/2)
-                data = self.critical_f
+                delta = self.get('delta')
+                self.crit_f15 = formula('crit_f15', m22=self.m22, rho0=rho0, delta=delta)
+                data = self.crit_f15
         if q=='tailindex':
             try: data = self.tailindex
             except:
-                self.tailindex = self.fitProfileTail(plot=False)[0][1]
+                self.tailindex, self.tailGOF = self.fitTailProfile()
                 data = self.tailindex
+        if q=='tailGOF':
+            try: data = self.tailGOF
+            except:
+                self.tailindex, self.tailGOF = self.fitTailProfile()
+                data = self.tailGOF
         if q=='V':
             try: data = self.V if full else self.V[index]
             except:
@@ -646,7 +834,8 @@ class Snap():
         if q=='KQ':
             try: data = self.KQ
             except:
-                dpsi = gradient(self.psi, self.dx)
+                psi = self.get('psi')
+                dpsi = gradient(psi, self.dx)
                 self.KQ = hbar**2/(2*self.m**2) * np.sum(np.abs(dpsi[0])**2 + np.abs(dpsi[1])**2 + np.abs(dpsi[2])**2) * self.dx**3
                 data = self.KQ
         if q=='E':
@@ -697,17 +886,24 @@ class Snap():
             else:
                 print("String index given for non-dictionary-type quantity.")
             
+        if log10: data = np.log10(data)
         
-        if log10: data = np.log10(data)  
+        if data is None: raise KeyError(f"Quantity '{q}' is not supported.")
         
         return data
     
     
     
-    ## Plots a single given quantity defined throughout the box.
-    ## NOTE: This function is a helper. Use plot2d for same functionality +
-    ##       multi-quantity support.
     def singlePlot2d(self, q, axis=1, project=False, i=None, iSlice=None, log10=False, ax=None, **kwargs):
+        
+        """
+        Plots a single quantity defined throughout the box.
+        NOTE: This function is a helper. Use plot2d for same functionality + multi-quantity support.
+        - q: name of quantity
+        - index kwargs (axis, project, i, iSlice): specify index of multi-dimensional quantity
+        - log10: return log (base 10) of quantity
+        - ax: axes on which to plot
+        """
         
         figsize = kwargs.pop('figsize', None)
         dpi = kwargs.pop('dpi', 200)
@@ -722,15 +918,16 @@ class Snap():
             plt.figure(figsize=figsize, dpi=dpi)
             ax = plt.gca()
         
-        full_data = self.get(q)
         data = self.get(q, axis, project, i, iSlice, log10)
         if isinstance(axis, str): axis = "xyz".find(axis)
         if iSlice is None: iSlice = int(self.N/2)-1
-        if iSlice == 'max': iSlice = np.unravel_index(np.argmax(full_data), full_data.shape)[axis]
+        if iSlice == 'max': 
+            full_data = self.get(q)
+            iSlice = np.unravel_index(np.argmax(full_data), full_data.shape)[axis]
         if len(np.shape(data))!=2: print(f"Requested data is not 2-dimensional (shape {np.shape(data)})."); return
         
         data = data[zoom[0]:zoom[1], zoom[2]:zoom[3]]
-        extent = np.array([zoom[2], zoom[3], zoom[1], zoom[0]])*self.dx
+        extent = kwargs.pop('extent', np.array([zoom[2], zoom[3], zoom[1], zoom[0]])*self.dx)
         
         clims = kwargs.pop('clims', getColorLimits(data, climfactors))
         im = ax.imshow(data, extent=extent, cmap=cmap, vmin=clims[0], vmax=clims[1], **kwargs)
@@ -747,9 +944,15 @@ class Snap():
     
     
     
-    ## Plots multiple quantities defined throughout the box.
-    ## Same input parameters as Snap.singlePlot2d, but you can replace any parameter with a list.
     def plot2d(self, q, axis=1, project=False, i=None, iSlice=None, log10=False, ax=None, **kwargs):
+        
+        """
+        Plots multiple quantities defined throughout the box.
+        - q: name of quantity(s)
+        - index kwargs (axis, project, i, iSlice): specify index of multi-dimensional quantity
+        - log10: return log (base 10) of quantity
+        - ax: axes on which to plot
+        """
         
         dpi = kwargs.pop('dpi', 200)
         climfactors = kwargs.pop('climfactors', [0,1])
@@ -763,8 +966,7 @@ class Snap():
         
         combos = combineArguments(iterproduct, q, axis, project, i, iSlice, log10, climfactors, clims, cmap)
         combos = [np.array(combo, dtype=object) for combo in combos]
-        
-        qs = [combo[0] for combo in combos]
+        Qs = list(set([Q[combo[0]] for combo in combos]))
         
         if ax is None:
             fig, ax = plt.subplots(1, len(combos), figsize=kwargs.pop('figsize', (4*len(combos), 4)), dpi=dpi)
@@ -778,32 +980,51 @@ class Snap():
         
         if save: 
             if filename is None:
-                Qs = [Q[q] for q in qs]
                 if len(Qs)==1: Qs = Qs[0]
-                filename = f"{Qs} Evolution Plot"
+                filename = f"{Qs}"
             plt.savefig(self.getPathAndName(filename, ".pdf"), transparent=True)
         
         return data
     
     
     
-    ## Plots a cross-section of any quantities defined throughout the box.
     def slicePlot(self, q, axis=1, i=None, iSlice=None, log10=False, ax=None, **kwargs):
+        
+        """
+        Plots a cross-section of any quantities defined throughout the box.
+        - q: name of quantity(s)
+        - index kwargs (axis, project, i, iSlice): specify index of multi-dimensional quantity
+        - log10: return log (base 10) of quantity
+        - ax: axes on which to plot
+        """
         
         return self.plot2d(q, axis=axis, i=i, iSlice=iSlice, log10=log10, ax=ax, **kwargs)
 
         
     
-    ## Plots a projection of a quantity defined throughout the box.
-    ## By "projection", I mean "maximum along an axis" for now (no weighting).
     def projectionPlot(self, q, axis=1, i=None, log10=False, ax=None, **kwargs):
+        
+        """
+        Plots a projection of a quantity defined throughout the box.
+        NOTE: By "projection", I mean "maximum along an axis" for now (no weighting).
+        - q: name of quantity(s)
+        - index kwargs (axis, project, i, iSlice): specify index of multi-dimensional quantity
+        - log10: return log (base 10) of quantity
+        - ax: axes on which to plot
+        """
         
         return self.plot2d(q, axis=axis, project=True, i=i, log10=log10, ax=ax, **kwargs)
     
     
     
-    ## Animates cross-sections of quantities through the box.
     def scan3d(self, q, axis=1, i=None, log10=False, **kwargs):
+        
+        """
+        Animates cross-sections of quantities through the box.
+        - q: name of quantity
+        - index kwargs (axis, i): specify index of multi-dimensional quantity
+        - log10: return log (base 10) of quantity
+        """
         
         dpi = kwargs.pop('dpi', 200)
         climfactors = kwargs.pop('climfactors', [0,1])
@@ -814,11 +1035,12 @@ class Snap():
         save = kwargs.pop('save', True)
         filename = kwargs.pop('filename', None)
         iterproduct = kwargs.pop('iterproduct', False)
-        frames = kwargs.pop('frames', np.arange(0, self.N))
+        eo = kwargs.pop('eo', 1)
+        frames = kwargs.pop('frames', np.arange(0, self.N, eo))
         
         combos = combineArguments(iterproduct, q, axis, '/', i, '/', log10, climfactors, clims, cmap)
         combos = [np.array(combo, dtype=object) for combo in combos]
-        qs = [combo[0] for combo in combos]
+        Qs = list(set([Q[combo[0]] for combo in combos]))
         
         clims, data = [], None
         for c in range(len(combos)):
@@ -839,7 +1061,7 @@ class Snap():
         
         def animate(j):
             
-            if j%10==0: print(f"Animating frame {j+1}/{len(frames)}")
+            if j%10==0: print("Animating frame {}... ({:.2%})".format(j+1, j/len(frames)))
             
             nonlocal colorbarmade
             
@@ -855,152 +1077,295 @@ class Snap():
         writer = ani.PillowWriter(fps=fps)
         if save: 
             if filename is None:
-                Qs = [Q[q] for q in qs]
                 if len(Qs)==1: Qs = Qs[0]
+                filename = f"{Qs} Scan"
             anim.save(self.getPathAndName(filename, ".gif"), writer=writer)
         
         return data
     
     
     
-    ## Computes the soliton density profile.
-    ## Toggle 'plot' to plot and 'fit' to include the theoretical profile.
-    def densityProfile(self, rmin=None, rmax=None, shells=20, normalize=True, neighbors=1, rands=1e5, fit=False, plot=True, ax=None, **kwargs):
+    def densityProfile(self, rmin=None, rmax=None, shells=200, normalize=False, raw=False, recalculate=False, 
+                       neighbors=1, rands=1e4, plot=False, fit=False, ax=None, **kwargs):
+        
+        """
+        Computes density profile using sub-pixel density centering and averaging.
+        - rmin, rmax, shells: radial domain and resolution
+        - normalize: measure rho/rho_0 by r/r_c
+        - raw: return raw, discrete data (not interpolation)
+        - recalculate: compute profile regardless of past computations
+        - neighbors: number of neighbors to consider in sub-pixel centering
+        - rands: number of random coordinates used in each shell for sub-pixel averaging
+        - plot: show plot along with computation
+        - fit: include best fit theoretical soliton profile with plot
+        - ax: axes on which to plot
+        """
         
         save = kwargs.pop('save', False)
         filename = kwargs.pop('filename', "Density Profile")
+        interpkws = kwargs.pop('interpkws', {'k':5, 's':0.02, 'ext':1})
+        legendkws = kwargs.pop('legendkws', {'loc':3, 'fontsize':'x-small'})
         
-        rho, rho0, r_c, iB = self.get('rho'), self.get('rho0'), self.get('r_c'), self.get('i0')
+        rho, iMax, rho0, r_c = self.get('rho'), self.get('iMax'), None, None
+        if normalize or fit: rho0, r_c = self.get('rho0'), self.get('r_c')
         
-        i0 = np.array([int(self.N/2)-1]*3)
-        rho = np.roll(rho, list(i0-iB), axis=np.arange(3))
+        loglog_profile = None
+        if 'profile' in dir(self): loglog_profile = self.profile
+        else: recalculate = True
         
-        x_ = (np.arange(100)+0.5)*self.dx
-        x, y, z = np.meshgrid(x_, x_, x_)
-        x0, y0, z0 = x_[i0]
+        standard = (rmin is None) and (rmax is None) and (shells==200) and (not raw) and (not normalize) and (neighbors==1) and (rands==1e4)
+        mids = rho_r = None
+        if recalculate or not standard:
+            
+            iC = np.array([int(self.N/2)-1]*3)
+            x_ = (np.arange(100)+0.5)*self.dx
+            x, y, z = np.meshgrid(x_, x_, x_)
+            xC, yC, zC = x_[iC]
+            rho = np.roll(rho, list(iC-iMax), axis=np.arange(3))
+            
+            iN = slice(iC[0]-neighbors, iC[0]+neighbors+1)
+            xN = x_[(iN)]
+            mN = np.ravel(rho[iN, iN, iN]*self.dx**3)
+            coords = np.array([np.ravel(x) for x in np.meshgrid(xN, xN, xN)])
+            xCM, yCM, zCM = np.sum(mN*coords, axis=1)/np.sum(mN)
+            #offset = np.sqrt((xC-xCM)**2 + (yC-yCM)**2 + (zC-zCM)**2)
+            
+            if rmin is None: rmin = 1e-2#offset/2
+            elif normalize: rmin = rmin*r_c
+            if rmax is None: rmax = self.Lbox/2
+            elif normalize: rmax = rmax*r_c
+            
+            mids = np.logspace(np.log10(rmin), np.log10(rmax), shells)
+            spacing = np.log10(mids[1])-np.log10(mids[0])
+            r = np.logspace(np.log10(mids[0])-spacing/2, np.log10(mids[-1])+spacing/2, shells+1)
+            
+            rho_r = np.zeros(shells)
+            for i in range(shells):
+                random_coords = np.random.uniform(-1,1,size=(3, int(rands)))
+                norm = np.sqrt(np.sum(random_coords**2, axis=0))
+                random_coords = random_coords/norm
+                r_for_randoms = np.logspace(np.log10(r[i]), np.log10(r[i+1]), int(rands))
+                random_coords = random_coords * r_for_randoms
+                random_coords = np.array([random_coords[0]+xCM, random_coords[1]+yCM, random_coords[2]+zCM])
+                random_i = np.int32(np.round(random_coords/self.dx-0.5))
+                random_i[random_i >= 100] = 99
+                rho_r[i] = np.mean(rho[random_i[0], random_i[1], random_i[2]])
+            
+            if normalize: rho_r, mids = rho_r/rho0, mids/r_c
+            if not raw: 
+                loglog_profile = UnivariateSpline(np.log10(mids), np.log10(rho_r), **interpkws)
+                if standard: self.profile = loglog_profile
         
-        iN = slice(i0[0]-neighbors, i0[0]+neighbors+1)
-        xN = x_[(iN)]
-        mN = np.ravel(rho[iN, iN, iN]*self.dx**3)
-        coords = np.array([np.ravel(x) for x in np.meshgrid(xN, xN, xN)])
-        xCM, yCM, zCM = np.sum(mN*coords, axis=1)/np.sum(mN)
-        offset = np.sqrt((x0-xCM)**2 + (y0-yCM)**2 + (z0-zCM)**2)
-        
-        if rmin is None: rmin = offset/2
-        elif normalize: rmin = rmin*r_c
-        if rmax is None: rmax = self.Lbox/2
-        elif normalize: rmax = rmax*r_c
-        
-        r = np.logspace(np.log10(rmin), np.log10(rmax), shells)
-        mids = 10**np.array([np.mean(np.log10([r[i], r[i+1]])) for i in range(shells-1)])
-        
-        rho_r = np.zeros(shells-1)
-        for i in range(shells-1):
-            random_coords = np.random.uniform(-1,1,size=(3, int(rands)))
-            norm = np.sqrt(np.sum(random_coords**2, axis=0))
-            random_coords = random_coords/norm
-            r_for_randoms = np.logspace(np.log10(r[i]), np.log10(r[i+1]), int(rands))
-            random_coords = random_coords * r_for_randoms
-            random_coords = np.array([random_coords[0]+xCM, random_coords[1]+yCM, random_coords[2]+zCM])
-            random_i = np.int32(np.round(random_coords/self.dx-0.5))
-            rho_r[i] = np.mean(rho[random_i[0], random_i[1], random_i[2]])
-        
-        if normalize: rho_r, mids = rho_r/rho0, mids/r_c
-        
+        else:
+            mids = np.logspace(-2,1,shells)
+            rho_r = 10**loglog_profile(np.log10(mids))
+            
         if plot or save or ax is not None:
             
             figsize = kwargs.pop('figsize', (6,4))
             dpi = kwargs.pop('dpi', 200)
-            lims = kwargs.pop('lims', ([1e-1,1e2,1e-5,1] if normalize else [5e-2,5e1,1e2,1e10]))
+            lims = kwargs.pop('lims', ([1e-1,1e2,1e-5,2] if normalize else [1e-2,1e1,1e5,2e11]))
             
             if ax is None: fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-            label = rf'$\rho_0 = {np.round(rho0/1e10,1)}$' + r' [$10^{10}$ ' + U['density'] + ']'
-            ax.loglog(mids, rho_r, 'o-', label=label, **kwargs)
+            label = r'$\rho_{\mathrm{max}}'+' = {:.1e}$ '.format(self.get('rhoMax')) + U['density']
+            ax.loglog(mids, rho_r, 'k', label=label, linewidth=5, **kwargs)
             ax.set_xlabel(r"$r$" + normalize*r"$/r_c$" + (not normalize)*f" {U['length']}")
             ax.set_ylabel(r"$\rho(r)$" + normalize*r"$/\rho_0$" + (not normalize)*f" {U['density']}")
             ax.set_title(r"($f_{15}$" + rf"$ = {self.f15}$, $t = {np.round(self.t,3)}$)")
             ax.set(xlim=(lims[0], lims[1]), ylim=(lims[2], lims[3]))
+            lims = np.append(ax.get_xlim(), ax.get_ylim())
             
             if fit:
-                r_fit = np.logspace(np.log10(lims[0]), np.log10(lims[1]), 100)
-                rho_fit_noSI = self.solitonDensityFunction(r_fit, normalize=normalize, noSI=True)
-                ax.loglog(r_fit, rho_fit_noSI, c='k', label='Theoretical Non-SI Profile')
-                if self.a_s != 0.0:
-                    rho_fit = self.solitonDensityFunction(r_fit, normalize=normalize)
-                    ax.loglog(r_fit, rho_fit, c='gray', label='Theoretical SI Profile (Not Collapsed)')
-                plt.vlines((self.dx/r_c if normalize else self.dx), lims[2], lims[3], linestyles='dashed', label="Length of One Grid Cell", color="gray")
-                plt.vlines((3.5 if normalize else 3.5*r_c), lims[2], lims[3], linestyles='solid', label="Theoretical Non-SI Universal Cutoff", color="rosybrown")
+                
+                r_fit = np.logspace(np.log10(lims[0]/2), np.log10(lims[1]*2), 100)
+                rho_fit = formula('soliton', r=r_fit, s=self, normalize=normalize)
+                
+                ax.loglog(r_fit, rho_fit, c='goldenrod',
+                          label=r'Soliton Fit ($\rho_0 = {:.1e}$, $\delta = {:.4}$, $\psi^2 = {:.2e}$)'.format(self.rho0, self.delta, self.solitonGOF))
+                
+                plt.vlines((3.5 if normalize else 3.5*r_c), lims[2], lims[3], linestyles='dashed', label=r"Theoretical Universal Cutoff ($3.5r_c$)", color="rosybrown")
             
             ax.grid()
-            plt.legend(loc=3, fontsize='small')
+            plt.legend(**legendkws)
             
-        if save: plt.savefig(self.getPathAndName(filename, ".pdf"), transparent=True)
+            if save: plt.savefig(self.getPathAndName(filename, ".pdf"), transparent=True)
         
-        return mids, rho_r
+        return (mids, rho_r) if raw else loglog_profile
     
     
     
-    ## Theoretical soliton density function of radius (before collapse).
-    def solitonDensityFunction(self, r, normalize=True, **kwargs):
+    def fitSolitonProfile(self, rmin=None, rmax=None, shells=20, plot=False, ax=None, **kwargs):
         
-        noSI = kwargs.pop('noSI', False)
-        rho0 = kwargs.pop('rho0', self.get('rho0'))
-        r_c = kwargs.pop('r_c', self.get('r_c'))
-        beta = kwargs.pop('beta', (0 if noSI else self.get('beta')))
+        """
+        Fits the soliton density profile to eq. (6) in sifdm_notes.
+        NOTE: Free parameter 'delta' compensates for fluctuations about the ground state.
+        - rmin, rmax, shells: radial domain in which to fit and resolution
+        - plot: show raw data with fit
+        - ax: axes on which to plot
+        """
         
-        def i1(b): return np.tanh(b/5)
-        def i2(b): return np.tanh(b)
-        def i3(b): return np.tanh(np.sqrt(b))**2
+        dpi = kwargs.pop('dpi', 200)
+        bounds = kwargs.pop('bounds', ([0,5e-1], [100,2]))
         
-        if not normalize: r = r/r_c
+        if rmin is None or rmax is None:
+            r_start, r_end = self.solitonConfidenceInterval()
+            if rmin is None: rmin = r_start
+            if rmax is None: rmax = r_end
         
-        rho = (1 + (1+2.60*i1(beta)) * 0.091 * (r*np.sqrt(1+beta))**(2-i2(beta)/5))**(-8+22/5*i3(beta))
+        def log10SolitonDensity(log10r, log10rho0, delta):
+            
+            rho0 = 10**log10rho0
+            b = formula('beta', m22=self.m22, f=self.f, rho0=rho0)
+            r_c = formula('r_c', m22=self.m22, rho0=rho0, delta=delta)
+            i1 = np.tanh(b/5)
+            i2 = np.tanh(b)
+            i3 = np.tanh(np.sqrt(b))**2
+            
+            return log10rho0 + np.log10((1 + (1+2.60*i1) * 0.091*((10**log10r/r_c)*np.sqrt(1+b))**(2-i2/5))**(-8+22/5*i3))
         
-        if not normalize: rho = rho*rho0
+        log10r = np.linspace(np.log10(rmin), np.log10(rmax), shells)
+        r = 10**log10r
+        profile = self.get('profile')
+        log10rho = profile(log10r)
+        rho = 10**log10rho              
+        fit = None
+        try: 
+            fit = curve_fit(log10SolitonDensity, log10r, log10rho, p0=(np.log10(self.rhoMax),1), bounds=bounds, **kwargs)                 
+        except:
+            return np.repeat(np.nan, 3)
+        rho0_fit, delta_fit = 10**fit[0][0], fit[0][1]
+        rho_fit = 10**log10SolitonDensity(log10r, np.log10(rho0_fit), delta_fit)
+        goodness = 1/shells * np.sum(np.array(np.log(rho) - np.log(rho_fit))**2)
         
-        return rho
+        if plot:
+            if ax is None: fig, ax = plt.subplots(dpi=dpi)
+            ax.loglog(r, rho, 'o-', label="Measured Density")
+            
+            r_fit = np.linspace(rmin, rmax, 100)
+            rho_fit = 10**log10SolitonDensity(np.log10(r_fit), np.log10(rho0_fit), delta_fit)
+            ax.loglog(r_fit, rho_fit, 'k', label=r"$\rho_0 = {:.4e}\ (\delta = {:.4})$".format(rho0_fit, delta_fit))
+        
+            ax.set_xlabel(r"$r$ " + U['length'])
+            ax.set_ylabel(r"$\rho(r)$ " + U['density'])
+            ax.set_title(r"($f_{15}$" + rf"$ = {self.f15}$, $t = {np.round(self.t,3)}$)")
+            ax.grid()
+            plt.legend()
+        
+        return rho0_fit, delta_fit, goodness
     
     
     
-    ## Fits tail of soliton density profile to a power law.
-    def fitProfileTail(self, rmin=7.0, plot=True, ax=None, **kwargs):
+    def fitTailProfile(self, rmin=1, rmax=8, shells=20, plot=False, ax=None, **kwargs):
+        
+        """
+        Fits the density profile tail to a power law.
+        - rmin, rmax, shells: radial domain in which to fit and resolution
+        - plot: show raw data with fit
+        - ax: axes on which to plot
+        """
         
         dpi = kwargs.pop('dpi', 200)
         save = kwargs.pop('save', False)
         filename = kwargs.pop('filename', "Density Profile Tail")
         
-        Lbox, r_c = self.get('Lbox'), self.get('r_c')
+        def log10PowerLaw(log10r, log10A, n): return log10A + n*log10r
         
-        def powerLawLine(r, A, n): return A + n*r
-        
-        r, rho = self.densityProfile(rmin, Lbox/2/r_c, normalize=True, plot=False)
-        fit = curve_fit(powerLawLine, np.log10(r), np.log10(rho), p0=[-3,-3])
+        log10r = np.linspace(np.log10(rmin), np.log10(rmax), shells)
+        r = 10**log10r
+        profile = self.get('profile')
+        log10rho = profile(log10r)
+        rho = 10**log10rho
+        fit = curve_fit(log10PowerLaw, log10r, log10rho, p0=[0,-3])
+        log10A_fit, n_fit = fit[0]
+        rho_fit = 10**log10PowerLaw(log10r, log10A_fit, n_fit)
+        goodness = 1/shells * np.sum(np.array(np.log(rho) - np.log(rho_fit))**2)
         
         if plot:
             if ax is None: fig, ax = plt.subplots(dpi=dpi)
-            ax.loglog(r, rho, 'o-', label="Measured Density", **kwargs)
+            ax.loglog(r, rho, 'k.', label="Measured Density", **kwargs)
             
-            A_fit, n_fit = fit[0]
-            r_fit = np.linspace(rmin, Lbox/2/r_c, 100)
-            rho_fit = 10**(powerLawLine(np.log10(r_fit), A_fit, n_fit))
-            ax.loglog(r_fit, rho_fit, 'k', label=f"$n = {np.round(n_fit,4)}$")
-        
-            ax.set_xlabel(r"$r/r_c$")
-            ax.set_ylabel(r"$\rho(r)/\rho_0$")
+            r_fit = np.linspace(rmin, rmax, 100)
+            rho_fit = 10**(log10PowerLaw(np.log10(r_fit), log10A_fit, n_fit))
+            ax.loglog(r_fit, rho_fit, 'goldenrod', label=f"$n = {np.round(n_fit,4)}$")
+            
+            ax.set_xlabel(rf"$r$ {U['length']}")
+            ax.set_ylabel(rf"$\rho(r)$ {U['density']}")
             ax.set_title(r"($f_{15}$" + rf"$ = {self.f15}$, $t = {np.round(self.t,3)}$)")
             ax.grid()
             plt.legend()
         
         if save: plt.savefig(self.getPathAndName(filename, ".pdf"), transparent=True)    
         
-        return fit
+        return n_fit, goodness
     
     
     
-    ## Retrieves folder path based on saving preferences and organizes given filename + extension.
+    def solitonConfidenceInterval(self, rmin=None, rmax=None, shells=200, plot=False, details=False, **kwargs):
+        
+        """
+        Estimates a radial domain in which the density profile resembles a soliton.
+        Domain should lie between artifacts of resolution and universal cutoff.
+        - rmin, rmax, shells: radial domain of search and resolution
+        - plot: display confidence interval with data
+        - details: include concavity extrema and estimated fit on plot
+        """
+        
+        nobreak_for = kwargs.pop('nobreak_for', 0.03)
+        dv8_factor = kwargs.pop('dv8_factor', 2)
+        
+        profile = self.get('profile')
+        if rmin is None: rmin = 1e-2
+        if rmax is None: rmax = self.Lbox/2
+        r = np.logspace(np.log10(rmin), np.log10(rmax), shells)
+        
+        convex, _ = find_peaks(profile(np.log10(r), nu=2), height=0)
+        concave, _ = find_peaks(-profile(np.log10(r), nu=2), height=0)
+        
+        ## r_start is the closest peak in negative concavity to 1.5 times the grid spacing.
+        r_start = r[concave][np.argmin(np.abs( np.log10(r[concave]/(self.dx*1.5)) ))]
+        
+        ## r_end is the closest peak in positive convexity to the point at which a fit to 
+        ## data near r_start deviates from the profile by a factor of 2.
+        rho0_est, delta_est, _ = self.fitSolitonProfile(r_start, r_start+nobreak_for)
+        beta_est = formula('beta', m22=self.m22, f=self.f, rho0=rho0_est)
+        r_breaking = np.logspace(np.log10(r_start), 1, 100)
+        rho_est_theory = formula('soliton', r=r_breaking, s=self, rho0=rho0_est, delta=delta_est, beta=beta_est)
+        rho_est_measured = 10**profile(np.log10(r_breaking))
+        r_end = r_breaking[np.argmin(np.abs(rho_est_measured/rho_est_theory - dv8_factor))]
+        r_end = r[convex][np.argmin(np.abs(np.log10(r_end) - np.log10(r[convex])))]
+        
+        if plot or details:
+            fig, ax = plt.subplots(dpi=200)
+            ax.loglog(r, 10**profile(np.log10(r)), 'k', label="Density Profile")
+            ylim = ax.get_ylim()
+            plt.vlines([r_start, r_end], *ylim, colors='goldenrod', linestyles='dashed')
+            plt.fill_betweenx(ylim, r_start, r_end, color='goldenrod', alpha=0.2, label="Soliton Confidence Interval")
+            ax.set_xlabel(rf"$r$ {U['length']}")
+            ax.set_ylabel(rf"$\rho(r)$ {U['density']}")
+            ax.set_title(r"($f_{15}$" + rf"$ = {self.f15}$, $t = {np.round(self.t,3)}$)")
+            ax.grid()
+            
+            if details:
+                ax.plot(r_breaking, rho_est_theory, 'm.', label="Dummy Soliton Fit", markersize=1)
+                ax.plot(r[convex], 10**profile(np.log10(r[convex])), 'r*', label="Local Convexity Maxima")
+                ax.plot(r[concave], 10**profile(np.log10(r[concave])), 'g*', label="Local Concavity Maxima")
+            
+            ax.set(ylim=ylim)
+            plt.legend(fontsize='small')
+            
+        return (r_start, r_end)
+    
+    
+    
     def getPathAndName(self, filename, ext):
         
-        path = os.path.join(saveToParent, self.dir + " Images")
+        """
+        Retrieves folder path based on saving preferences and creates file name.
+        - filename: name to assign file
+        - ext: file extension
+        """
+        
+        path = createImageSubfolders(parent=saveToParent, folders=[self.snapdir], mkdir=False)[0]
         if not os.path.isdir(path): path = saveToParent
         append = self.dir + " - " + str(self.num) + " - " + filename + ext
         path = os.path.join(path, append)
@@ -1013,8 +1378,14 @@ class Snap():
 
 
 
-## Gets the gradient of a quantity defined in the box.
 def gradient(f, dx, i=[0,1,2]): 
+    
+    """
+    Gets the gradient of a quantity defined in the box.
+    - f: 3-dimensional array of data
+    - dx: grid spacing
+    - i: index(s) of gradient to return
+    """
     
     axes = np.arange(3)
     grad = []
@@ -1026,9 +1397,15 @@ def gradient(f, dx, i=[0,1,2]):
 
 
 
-## Given 3-dimensional data, returns a 2-d cross-section along an axis.
-## If sheet is None, returns slice containing largest value in data.
 def getSlice(data, axis, iSlice='max'):
+    
+    """
+    Given 3-dimensional data, returns a 2-d cross-section along an axis.
+    NOTE: set iSlice to 'max' to return slice containing largest value in data
+    - data: 3-dimensional array of data
+    - axis: axis along which to take cross section
+    - iSlice: index of slice to return
+    """
     
     if isinstance(axis, str): axis = "xyz".find(axis)
     
@@ -1041,8 +1418,14 @@ def getSlice(data, axis, iSlice='max'):
 
 
 
-## Given 3-dimensional data, returns a 2-d projection along an axis.
 def getProjection(data, axis):
+    
+    """
+    Given 3-dimensional data, returns a 2-d projection along an axis.
+    NOTE: This simply finds the maximum along an axis (no weighting).
+    - data: 3-dimensional array of data
+    - axis: axis along which to project data
+    """
     
     if isinstance(axis, str): axis = "xyz".find(axis)
     
@@ -1050,10 +1433,13 @@ def getProjection(data, axis):
 
 
 
-## Given a set of numerical data, computes the color limits for colored plots.
-## If factors are not supplied, limits default to min and max of data.
-## 'factors' span the range between min and max of data.
 def getColorLimits(data, factors=(0,1)):
+    
+    """
+    Computes color limits of a data set for colored plots.
+    - data: N-dimensional numerical data set
+    - factors: 2-tuple of floats indicating data values of lowest and highest color, relative to the min and max of data.
+    """
     
     low, high = np.min(data), np.max(data)
     clims = (low + factors[0]*(high-low), high - (1-factors[1])*(high-low))
@@ -1062,24 +1448,14 @@ def getColorLimits(data, factors=(0,1)):
 
 
 
-## Creates subfolders to organize saved images within given parent directory.
-def createImageSubfolders(parent=os.getcwd()):
-    
-    subfolders = []
-    for folder in folders:
-        dirname = os.path.join(parent, os.path.basename(folder) + " Images")
-        subfolders.append(dirname)
-        if not os.path.isdir(dirname): 
-            os.mkdir(dirname)
-            
-    return subfolders
-
-
-
-## Given ragged assortment of arguments, returns coherent lists of arguments
-## for execution in multi-quantity plotting functions.
 def combineArguments(iterproduct=False, q='/', axis='/', project='/', i='/', iSlice='/', log10='/',
-                     climfactors='/', clims='/', cmap='/', c='/'):
+                     climfactors='/', clims='/', cmap='/', c='/', snapdir='/', smooth='/'):
+    
+    """
+    Given ragged assortment of arguments, returns coherent lists of arguments for execution in multi-quantity plotting functions.
+    - iterproduct: return all combinations of arguments (if False, do not return "cross" combinations)
+    - other kwargs: arguments to combine, either in their natural type or lists
+    """
     
     if isinstance(q, str) and q!='/': q = [q]
     if (isinstance(axis, int) or axis is None) and axis!='/': axis = [axis]
@@ -1093,8 +1469,10 @@ def combineArguments(iterproduct=False, q='/', axis='/', project='/', i='/', iSl
     if len(np.shape(clims))<2 and clims!='/': clims = [clims]
     if (isinstance(cmap, str) or cmap is None) and cmap!='/': cmap = [cmap]
     if (isinstance(c, str) or c is None) and c!='/': c = [c]
+    if isinstance(snapdir, str) and snapdir!='/': snapdir = [snapdir]
+    if isinstance(smooth, int) or smooth is None: smooth = [smooth]
     
-    l = {'q':q, 'axis':axis, 'project':project, 'i':i, 'iSlice':iSlice, 'log10':log10, 'climfactors':climfactors, 'clims':clims, 'cmap':cmap, 'c':c}
+    l = {'q':q, 'axis':axis, 'project':project, 'i':i, 'iSlice':iSlice, 'log10':log10, 'climfactors':climfactors, 'clims':clims, 'cmap':cmap, 'c':c, 'snapdir':snapdir, 'smooth':smooth}
     args = [l[j] for j in l if l[j]!='/']
     
     combos = []
@@ -1110,8 +1488,13 @@ def combineArguments(iterproduct=False, q='/', axis='/', project='/', i='/', iSl
 
 
 
-## Catalog of conversion factors from code units to other units.
 def unitsFactor(u, to='SI'):
+    
+    """
+    Catalog of conversion factors from code units to other units.
+    - u: physical concept (e.g.: 'time')
+    - to: unit to which to convert (from code units, e.g.: 'Gyr')
+    """
     
     to = to.lower()
     factor = 1
@@ -1143,9 +1526,203 @@ def unitsFactor(u, to='SI'):
         if to=='si': factor = 6.768e-29
         if to=='esu': factor = 6.768e-32
     
-    if factor==1: raise KeyError("Support for requested unit is not yet implemented.")
+    if factor==1: raise KeyError("Requested unit is not yet supported.")
     
     return factor
+
+
+
+def SMA(data, n):
+    
+    """
+    Simple moving average of 1-d list of data.
+    - data: list of numbers
+    - n: neighbors over which to smoothen
+    """
+    
+    smoothed = data
+    if n>0:
+        smoothed[:n] = np.repeat(np.nan, n)
+        smoothed[-n:] = np.repeat(np.nan, n)
+        smoothed[n:-n] = [np.mean(data[i-n:i+n+1]) for i in range(n,len(data)-n)]
+    
+    return smoothed
+
+
+
+## Formulae
+
+
+
+def formula(q, **kwvars):
+    
+    """
+    Catalog of formulae or observed relations between quantities.
+    - q: quantity to compute
+    - kwvars: other variables in q-specific formula
+    - NOTE: supply Snap object as keyword 's' to automatically extract variables
+    """
+    
+    if len(kwvars)==0: raise TypeError("Must supply keyword variables.")
+    
+    s = kwvars.get('s')
+    if q=='a_s':
+        m = kwvars.get('m') if 'm' in kwvars else s.get('m')
+        f = kwvars.get('f') if 'f' in kwvars else s.get('f')
+        return hbar*c**3*m/(32*pi*f**2)
+    if q=='crit_M_sol': 
+        m = kwvars.get('m') if 'm' in kwvars else s.get('m')
+        a_s = kwvars.get('a_s') if 'a_s' in kwvars else s.get('a_s')
+        return hbar/np.sqrt(G*m*a_s)
+    if q=='crit_rho0': 
+        m22 = kwvars.get('m22') if 'm22' in kwvars else s.get('m22')
+        f15 = kwvars.get('f15') if 'f15' in kwvars else s.get('f15')
+        return 1.2e9*m22**2*f15**4
+    if q=='crit_r_c':
+        m22 = kwvars.get('m22') if 'm22' in kwvars else s.get('m22')
+        f15 = kwvars.get('f15') if 'f15' in kwvars else s.get('f15')
+        return 0.18/(m22*f15)
+    if q=='crit_f15':
+        m22 = kwvars.get('m22') if 'm22' in kwvars else s.get('m22')
+        rho0 = kwvars.get('rho0') if 'rho0' in kwvars else s.get('rho0')
+        delta = kwvars.get('delta') if 'delta' in kwvars else s.get('delta')
+        return delta**(3/4)*(rho0/1.2e9)**(1/4) * m22**(-1/2)
+    if q=='beta': 
+        m22 = kwvars.get('m22') if 'm22' in kwvars else s.get('m22')
+        f = kwvars.get('f') if 'f' in kwvars else s.get('f')
+        rho0 = kwvars.get('rho0') if 'rho0' in kwvars else s.get('rho0')
+        return 1.6e-12/m22 * rho0**(1/2) * hbar*c**5/(32*pi*G*f**2)
+    if q=='r_c':
+        m22 = kwvars.get('m22') if 'm22' in kwvars else s.get('m22')
+        rho0 = kwvars.get('rho0') if 'rho0' in kwvars else s.get('rho0')
+        delta = kwvars.get('delta') if 'delta' in kwvars else s.get('delta')
+        return (rho0/(1.9e7*delta))**(-1/4)*(m22)**(-1/2)
+    if q=='rho0':
+        m22 = kwvars.get('m22') if 'm22' in kwvars else s.get('m22')
+        r_c = kwvars.get('r_c') if 'r_c' in kwvars else s.get('r_c')
+        delta = kwvars.get('delta') if 'delta' in kwvars else s.get('delta')
+        return 1.9e7*delta*r_c**(-4)*m22**(-2)
+    if q=='M_sol': 
+        rho0 = kwvars.get('rho0') if 'rho0' in kwvars else s.get('rho0')
+        r_c = kwvars.get('r_c') if 'r_c' in kwvars else s.get('r_c')
+        return 11.6*rho0*r_c**3
+    if q=='soliton':
+        r = kwvars.get('r', np.logspace(-2,1))
+        normalize = kwvars.get('normalize', False)
+        m22 = kwvars.get('m22', 1)
+        rho0 = kwvars.get('rho0')
+        r_c = kwvars.get('r_c')
+        delta = kwvars.get('delta', 1)
+        beta = kwvars.get('beta', 0)
+        
+        if not normalize:
+            try:
+                if not 's' in kwvars:
+                    if not 'rho0' in kwvars: 
+                        rho0 = formula('rho0', m22=m22, r_c=r_c, delta=delta)
+                    if not 'r_c' in kwvars: 
+                        print('here')
+                        r_c = formula('r_c', m22=m22, rho0=rho0, delta=delta)
+                else:
+                    if not 'delta' in kwvars:
+                        delta = s.get('delta')
+                    if not 'rho0' in kwvars:
+                        rho0 = s.get('rho0')
+                    if not 'r_c' in kwvars:
+                        r_c = formula('r_c', m22=s.m22, rho0=rho0, delta=delta)
+                    if not 'beta' in kwvars:
+                        beta = s.get('beta')
+            except:
+                normalize = True
+        elif s is not None:
+            beta = s.get('beta')
+                
+        i1 = np.tanh(beta/5)
+        i2 = np.tanh(beta)
+        i3 = np.tanh(np.sqrt(beta))**2
+        
+        if not normalize: r = r/r_c
+        
+        rho = (1 + (1+2.60*i1) * 0.091 * (r*np.sqrt(1+beta))**(2-i2/5))**(-8+22/5*i3)
+        
+        if not normalize: rho = rho*rho0
+        
+        return rho
+        
+    
+    raise KeyError("Requested formula is not yet supported.")
+    
+    return
+
+
+
+## Cross-simulation plotting/analysis
+
+
+
+def evolutionComparison(snapdir, q, i=None, log10=False, ax=None, **kwargs): 
+    
+    """
+    (PRELIMINARY) Direct comparison of evolutions of quantities between different simulations.
+    - snapdir: full path to output directory(s)
+    - q: name of quantity(s)
+    - i: specifies index of multi-dimensional quantity
+    - log10: return log (base 10) of quantity
+    - ax: axes on which to plot
+    """
+    
+    if isinstance(snapdir, str): snapdir = [snapdir]
+    
+    figsize = kwargs.pop('figsize', (9,3))
+    dpi = kwargs.pop('dpi', 200)
+    save = kwargs.pop('save', True)
+    filename = kwargs.pop('filename', None)
+    ext = kwargs.pop('ext', '.pdf')
+    c = kwargs.pop('c', None)
+    iterproduct = kwargs.pop('iterproduct', False)
+    legendkws = kwargs.pop('legendkws', {'fontsize':'small'})
+    snaps = kwargs.pop('snaps', None)
+    
+    combos = combineArguments(iterproduct, q, i=i, log10=log10, c=c, snapdir=snapdir)
+    Qs = list(set([Q[combo[0]] for combo in combos]))
+    
+    if ax is None:
+        plt.figure(figsize=figsize, dpi=dpi)
+        ax = plt.gca()
+    
+    t, data = [], []
+    for j in range(len(combos)):
+        
+        q, i, log10, c, snapdir = combos[j]
+        
+        print(f"Plotting quantity {j+1}: {Q[q]}...")
+        
+        sim = Sim(snapdir)
+        t.append(sim.get('t', snaps=snaps))
+        data.append(sim.get(q, snaps=snaps, i=i, log10=log10))
+        ax.plot(t[-1], data[-1], c=c, label=Q[q]+(i is not None)*f" {i}"+f" ({os.path.basename(snapdir)})", **kwargs)
+    
+    ylabel = kwargs.pop('ylabel', ("Multiple Quantities" if len(combos)>1 else Q[q] + (i is not None)*f" {i}" + f" {U.get(U.get(q), '')}"))
+    ax.set(xlabel=f"Time {U['time']}", ylabel=ylabel)
+    plt.grid(True)
+    plt.legend(**legendkws)    
+    
+    if save: 
+        if filename is None:
+            if len(Qs)==1: Qs = Qs[0]
+            filename = f"{Qs} Evolution Plot"
+        dirname = createImageSubfolders(parent=saveToParent, mkdir=False, folders=[], mkcomparisons=True)[0]
+        path = os.path.join(dirname, filename + ext)
+        plt.savefig(path, transparent=True) 
+    
+    return t, data
+
+
+
+
+
+
+
 
 
 
@@ -1168,6 +1745,40 @@ def unitsFactor(u, to='SI'):
 
 
 ## Handles folder checks and subfolder creation.
+
+
+
+def createImageSubfolders(parent=os.getcwd(), folders=folders, mkdir=True, mkcomparisons=True):
+    
+    """
+    Creates subfolders to organize saved images within given parent directory.
+    - parent: directory in which to create subfolders
+    - folders: output directories to associate subfolders
+    - mkdir: make the directory (if False, only returns folder name)
+    - mkcomparisons: make comparisons subfolder
+    """
+    
+    subfolders = []
+    for folder in folders:
+        basename = os.path.basename(folder)
+        dirname = None
+        if onlyNameF15:
+            f15 = float(basename[basename.find('f')+1:basename.find('L')])
+            dirname = os.path.join(parent, "sifdm - f15 - {:.3}".format(f15))
+        else:
+            dirname = os.path.join(parent, "sifdm - "+os.path.basename(folder))
+        subfolders.append(dirname)
+        if not os.path.isdir(dirname) and mkdir: 
+            os.mkdir(dirname)
+    if mkcomparisons:
+        dirname = os.path.join(parent, "sifdm - Comparisons")
+        subfolders.append(dirname)
+        if mkdir and not os.path.isdir(dirname): os.mkdir(dirname)
+            
+    return subfolders
+
+
+
 if __name__=='__main__':
     
     global imageSubfolders
