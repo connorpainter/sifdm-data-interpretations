@@ -1,8 +1,9 @@
-## SIFDM Data Interpretations:
-##
-## Created by Connor Painter on 9/27/21 to do elementary analysis on the 
-## outputs of SIFDM MATLAB code by Philip Mocz with Python.
-## Last updated: 12/08/21
+"""
+SIFDM Data Interpretations
+
+- Created by Connor Painter on 9/27/21 to do elementary analysis on the outputs of SIFDM MATLAB code by Philip Mocz.
+- Last updated: 01/17/22
+"""
 
 
 
@@ -22,17 +23,23 @@ mpl.rcParams['font.family'] = 'STIXGeneral'
 
 
 
-## GETTING STARTED: 
-##  -   Prepare to import your data (from Philip's .h5 output) by listing paths (strings) to output folders.
-##      -   List must be named 'folders'.
-##      -   Feel free to use my formatting below.
-##  -   Set saving preferences with 'createImgSubfolders' and 'saveToParent' below.
-##      -   'saveToParent' is the parent directory to which you want images saved.
-##      -   If 'createImgSubfolders' is True, compiling code will create subfolders to organize saved images.
+"""
+GETTING STARTED 
+
+- Prepare to import your data (from Philip's .h5 output) by listing paths (strings) to output folders in FOLDER SETUP.
+    -   List must be named 'folders'.
+    -   Feel free to use my formatting below.
+- Set saving preferences with 'createImgSubfolders' and 'saveToParent' below in PREFERENCES.
+    -   'saveToParent': the parent directory to which you want images saved.
+    -   'createImgSubfolders': create subfolders to organize saved images.
+"""
 
 
+"""
+FOLDER SETUP
 
-## Folder setup
+- Import your data (from Philip's .h5 output) here.
+"""
 
 
 
@@ -57,7 +64,11 @@ folders = [dInf, d4, d2_75, d2, d1]
 
 
 
-## Preferences for saved images
+"""
+PREFERENCES
+
+- Customize how you want your images saved here.
+"""
 
 
 
@@ -67,7 +78,19 @@ onlyNameF15 = False
 
 
 
-## Useful arrays and dictionaries
+"""
+USEFUL ARRAYS AND DICTIONARIES
+
+- Q: given quantity codename, outputs a more detailed name
+- Q0: lists quantities that are naturally described as scalars at a given time
+- Q1: lists quantities that are naturally described as vectors at a given time
+- Q2: lists quantities that are naturally described as matrices at a given time
+- Q3: lists quantities that are naturally described as rank-3 tensors at a given time
+- Q4: lists quantities that are naturally described as rank-4 tensors at a given time
+- U: given physical unit description or dimensionful quantity codename, outputs associated code units
+- C: given certain Q3 or Q4 quantity codename, outputs default colormap
+- LTX: given quantity codename, outputs associated LaTeX to draw symbols
+"""
 
 
 
@@ -163,7 +186,9 @@ LTX = {'psi':r"$\Psi$",
 
 
 
-## Constants
+"""
+CONSTANTS
+"""
 
 
 
@@ -174,7 +199,12 @@ pi = np.pi
 
 
 
-## Main code (visualization and analysis)
+"""
+SIM AND SNAP OBJECTS
+
+- Classes of objects representing single snapshots or entire simulations.
+- Intuitively attributed functions for plotting, animation, and analysis.
+"""
 
 
 
@@ -236,7 +266,7 @@ class Sim():
             s = self.snaps[snaps[j]]
             data.append(s.get(q, axis, project, i, iSlice, log10, **kwargs))
         
-        return data
+        return np.array(data)
     
     
     
@@ -260,8 +290,9 @@ class Sim():
         snaps = kwargs.pop('snaps', np.arange(0,len(self.snaps),eo))
         legendkws = kwargs.pop('legendkws', {'fontsize':'small'})
         smooth = kwargs.pop('smooth', None)
+        annotate = kwargs.pop('annotate', True)
         
-        combos = combineArguments(iterproduct, q, i=i, c=c, smooth=smooth)
+        combos = combineArguments(iterproduct, q=q, i=i, c=c, smooth=smooth)
         Qs = list(set([Q[combo[0]] for combo in combos]))
         
         if ax is None: fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
@@ -272,7 +303,7 @@ class Sim():
             
             q, i, c, smooth = combos[j]
             
-            print(f"Plotting quantity {j+1}: {Q[q]}...")
+            if annotate: print(f"Plotting quantity {j+1}: {Q[q]}...")
             
             data[j] = self.get(q, snaps=snaps, i=i)
             if isinstance(smooth, int): data[j] = SMA(data[j], smooth)
@@ -308,6 +339,7 @@ class Sim():
         wspace = kwargs.pop('wspace', 0.3)
         save = kwargs.pop('save', True)
         filename = kwargs.pop('filename', None)
+        ext = kwargs.pop('ext', '.gif')
         fps = kwargs.pop('fps', 20)
         iterproduct = kwargs.pop('iterproduct', False)
         clims = kwargs.pop('clims', [None,None])
@@ -316,7 +348,7 @@ class Sim():
         eo = kwargs.pop('eo', 1)
         snaps = kwargs.pop('snaps', np.arange(0,len(self.snaps),eo))
         
-        combos = combineArguments(iterproduct, q, axis, project, i, iSlice, log10, climfactors, clims, cmap)
+        combos = combineArguments(iterproduct, q=q, axis=axis, project=project, i=i, iSlice=iSlice, log10=log10, climfactors=climfactors, clims=clims, cmap=cmap)
         combos = [np.array(combo, dtype=object) for combo in combos]
         Qs = list(set([Q[combo[0]] for combo in combos]))
         
@@ -358,7 +390,7 @@ class Sim():
             if filename is None:
                 if len(Qs)==1: Qs = Qs[0]
                 filename = f"{Qs} Evolution Movie"
-            anim.save(self.getPathAndName(filename, ".gif"), writer=writer)
+            anim.save(self.getPathAndName(filename, ext), writer=writer)
         
         return
     
@@ -924,7 +956,7 @@ class Snap():
         if iSlice == 'max': 
             full_data = self.get(q)
             iSlice = np.unravel_index(np.argmax(full_data), full_data.shape)[axis]
-        if len(np.shape(data))!=2: print(f"Requested data is not 2-dimensional (shape {np.shape(data)})."); return
+        assert len(np.shape(data))==2, f"Requested data is not 2-dimensional (shape {np.shape(data)})."
         
         data = data[zoom[0]:zoom[1], zoom[2]:zoom[3]]
         extent = kwargs.pop('extent', np.array([zoom[2], zoom[3], zoom[1], zoom[0]])*self.dx)
@@ -959,6 +991,7 @@ class Snap():
         clims = kwargs.pop('clims', [None,None])
         zoom = kwargs.pop('zoom', [0,self.N,0,self.N])
         save = kwargs.pop('save', False)
+        ext = kwargs.pop('ext', '.pdf')
         filename = kwargs.pop('filename', None)
         wspace = kwargs.pop('wspace', 0.3)
         iterproduct = kwargs.pop('iterproduct', False)
@@ -982,7 +1015,7 @@ class Snap():
             if filename is None:
                 if len(Qs)==1: Qs = Qs[0]
                 filename = f"{Qs}"
-            plt.savefig(self.getPathAndName(filename, ".pdf"), transparent=True)
+            plt.savefig(self.getPathAndName(filename, ext), transparent=True)
         
         return data
     
@@ -1374,7 +1407,11 @@ class Snap():
 
 
 
-## Helper functions
+"""
+HELPER FUNCTIONS
+
+- Functions created for convenience and/or elegance when implemented elsewhere.
+"""
 
 
 
@@ -1448,8 +1485,7 @@ def getColorLimits(data, factors=(0,1)):
 
 
 
-def combineArguments(iterproduct=False, q='/', axis='/', project='/', i='/', iSlice='/', log10='/',
-                     climfactors='/', clims='/', cmap='/', c='/', snapdir='/', smooth='/'):
+def combineArguments(iterproduct=False, sim='/', snap='/', q='/', axis='/', project='/', i='/', iSlice='/', log10='/', climfactors='/', clims='/', cmap='/', c='/', smooth='/'):
     
     """
     Given ragged assortment of arguments, returns coherent lists of arguments for execution in multi-quantity plotting functions.
@@ -1457,6 +1493,8 @@ def combineArguments(iterproduct=False, q='/', axis='/', project='/', i='/', iSl
     - other kwargs: arguments to combine, either in their natural type or lists
     """
     
+    if not hasattr(sim, '__len__'): sim = [sim]
+    if not hasattr(snap, '__len__'): snap = [snap]
     if isinstance(q, str) and q!='/': q = [q]
     if (isinstance(axis, int) or axis is None) and axis!='/': axis = [axis]
     if isinstance(project, bool) and project!='/': project = [project]
@@ -1469,11 +1507,11 @@ def combineArguments(iterproduct=False, q='/', axis='/', project='/', i='/', iSl
     if len(np.shape(clims))<2 and clims!='/': clims = [clims]
     if (isinstance(cmap, str) or cmap is None) and cmap!='/': cmap = [cmap]
     if (isinstance(c, str) or c is None) and c!='/': c = [c]
-    if isinstance(snapdir, str) and snapdir!='/': snapdir = [snapdir]
     if isinstance(smooth, int) or smooth is None: smooth = [smooth]
     
-    l = {'q':q, 'axis':axis, 'project':project, 'i':i, 'iSlice':iSlice, 'log10':log10, 'climfactors':climfactors, 'clims':clims, 'cmap':cmap, 'c':c, 'snapdir':snapdir, 'smooth':smooth}
+    l = {'sim':sim, 'snap':snap, 'q':q, 'axis':axis, 'project':project, 'i':i, 'iSlice':iSlice, 'log10':log10, 'climfactors':climfactors, 'clims':clims, 'cmap':cmap, 'c':c, 'smooth':smooth}
     args = [l[j] for j in l if l[j]!='/']
+    if len(set([len(arg) for arg in args]))>2: iterproduct = True
     
     combos = []
     if iterproduct:
@@ -1550,7 +1588,11 @@ def SMA(data, n):
 
 
 
-## Formulae
+"""
+FORMULAE
+
+- Deriving quantities from known formulae.
+"""
 
 
 
@@ -1656,22 +1698,73 @@ def formula(q, **kwvars):
 
 
 
-## Cross-simulation plotting/analysis
+"""
+GENERALIZED PLOTTING & ANIMATION
+
+- Compare images and evolving quantities between different simulations.
+- No functionality lost from Sim and Snap attributed functions.
+"""
 
 
 
-def evolutionComparison(snapdir, q, i=None, log10=False, ax=None, **kwargs): 
+def plot2d(snap, q, axis=1, project=False, i=None, iSlice=None, log10=False, ax=None, **kwargs): 
     
     """
-    (PRELIMINARY) Direct comparison of evolutions of quantities between different simulations.
-    - snapdir: full path to output directory(s)
+    Plots multiple quantities defined throughout the box.
+    - q: name of quantity(s)
+    - index kwargs (axis, project, i, iSlice): specify index of multi-dimensional quantity
+    - log10: return log (base 10) of quantity
+    - ax: axes on which to plot
+    """
+    
+    dpi = kwargs.pop('dpi', 200)
+    climfactors = kwargs.pop('climfactors', [0,1])
+    clims = kwargs.pop('clims', [None,None])
+    zoom = kwargs.pop('zoom', None)
+    save = kwargs.pop('save', False)
+    ext = kwargs.pop('ext', '.pdf')
+    filename = kwargs.pop('filename', None)
+    wspace = kwargs.pop('wspace', 0.3)
+    iterproduct = kwargs.pop('iterproduct', False)
+    cmap = kwargs.pop('cmap', None)
+    
+    combos = combineArguments(iterproduct, snap=snap, q=q, axis=axis, project=project, i=i, iSlice=iSlice, log10=log10, climfactors=climfactors, clims=clims, cmap=cmap)
+    combos = [np.array(combo, dtype=object) for combo in combos]
+    Qs = list(set([Q[combo[1]] for combo in combos]))
+    
+    if ax is None:
+        fig, ax = plt.subplots(1, len(combos), figsize=kwargs.pop('figsize', (4*len(combos), 4)), dpi=dpi)
+        fig.subplots_adjust(wspace=wspace)
+    if not hasattr(ax, '__len__'): ax = np.array([ax])
+    
+    data = []
+    for j in range(len(combos)):
+        snap, q, axis, project, i, iSlice, log10, climfactors, clims, cmap = combos[j]
+        if zoom is None: zoom = [0,snap.N,0,snap.N]
+        data.append(snap.singlePlot2d(q, axis, project, i, iSlice, log10, climfactors=climfactors, clims=clims, cmap=cmap, ax=ax[j], zoom=zoom, **kwargs))
+    
+    if save: 
+        if filename is None:
+            if len(Qs)==1: Qs = Qs[0]
+            filename = f"{Qs}"
+        dirname = createImageSubfolders(parent=saveToParent, mkdir=False, folders=[], mkcomparisons=True)[0]
+        path = os.path.join(dirname, filename + ext)
+        plt.savefig(path, transparent=True)
+    
+    return data
+
+
+
+def evolutionPlot(sim, q, i=None, log10=False, ax=None, **kwargs):
+    
+    """
+    Plots the evolution of any scalar-valued quantities.
+    - sim: Sim object(s)
     - q: name of quantity(s)
     - i: specifies index of multi-dimensional quantity
     - log10: return log (base 10) of quantity
     - ax: axes on which to plot
     """
-    
-    if isinstance(snapdir, str): snapdir = [snapdir]
     
     figsize = kwargs.pop('figsize', (9,3))
     dpi = kwargs.pop('dpi', 200)
@@ -1681,10 +1774,9 @@ def evolutionComparison(snapdir, q, i=None, log10=False, ax=None, **kwargs):
     c = kwargs.pop('c', None)
     iterproduct = kwargs.pop('iterproduct', False)
     legendkws = kwargs.pop('legendkws', {'fontsize':'small'})
-    snaps = kwargs.pop('snaps', None)
     
-    combos = combineArguments(iterproduct, q, i=i, log10=log10, c=c, snapdir=snapdir)
-    Qs = list(set([Q[combo[0]] for combo in combos]))
+    combos = combineArguments(iterproduct, sim=sim, q=q, i=i, log10=log10, c=c)
+    Qs = list(set([Q[combo[1]] for combo in combos]))
     
     if ax is None:
         plt.figure(figsize=figsize, dpi=dpi)
@@ -1693,19 +1785,20 @@ def evolutionComparison(snapdir, q, i=None, log10=False, ax=None, **kwargs):
     t, data = [], []
     for j in range(len(combos)):
         
-        q, i, log10, c, snapdir = combos[j]
+        sim, q, i, log10, c = combos[j]
         
         print(f"Plotting quantity {j+1}: {Q[q]}...")
         
-        sim = Sim(snapdir)
-        t.append(sim.get('t', snaps=snaps))
-        data.append(sim.get(q, snaps=snaps, i=i, log10=log10))
-        ax.plot(t[-1], data[-1], c=c, label=Q[q]+(i is not None)*f" {i}"+f" ({os.path.basename(snapdir)})", **kwargs)
+        t_temp, data_temp = sim.evolutionPlot(q, i=i, log10=log10, c=c, ax=ax, save=False, annotate=False, **kwargs)
+        t.append(t_temp), data.append(data_temp)
     
-    ylabel = kwargs.pop('ylabel', ("Multiple Quantities" if len(combos)>1 else Q[q] + (i is not None)*f" {i}" + f" {U.get(U.get(q), '')}"))
-    ax.set(xlabel=f"Time {U['time']}", ylabel=ylabel)
+    legend = plt.legend(**legendkws)
+    for c in range(len(combos)):
+        text = legend.get_texts()[c].get_text() + f" ({combos[c][0].dir})"
+        legend.get_texts()[c].set_text(text)
+    ylabel = kwargs.pop('ylabel', ("Multiple Quantities" if len(Qs)>1 else Qs[0] + (i is not None)*f" {i}" + f" {U.get(U.get(q), '')}"))
+    ax.set(xlabel=f"Time {U['time']}", ylabel=ylabel, title=None)
     plt.grid(True)
-    plt.legend(**legendkws)    
     
     if save: 
         if filename is None:
@@ -1713,12 +1806,270 @@ def evolutionComparison(snapdir, q, i=None, log10=False, ax=None, **kwargs):
             filename = f"{Qs} Evolution Plot"
         dirname = createImageSubfolders(parent=saveToParent, mkdir=False, folders=[], mkcomparisons=True)[0]
         path = os.path.join(dirname, filename + ext)
-        plt.savefig(path, transparent=True) 
+        plt.savefig(path, transparent=True)
     
     return t, data
 
 
 
+def evolutionMovie(sim, q, axis=1, project=False, i=None, iSlice=None, log10=False, **kwargs):
+    
+    """
+    Animates the evolution of any quantities defined throughout the box.
+    - snapdir: full path to output directory(s)
+    - q: name of quantity(s)
+    - index kwargs (axis, project, i, iSlice): specify index of multi-dimensional quantity
+    - log10: return log (base 10) of quantity
+    """
+    
+    dpi = kwargs.pop('dpi', 200)
+    wspace = kwargs.pop('wspace', 0.3)
+    save = kwargs.pop('save', True)
+    filename = kwargs.pop('filename', None)
+    ext = kwargs.pop('ext', '.gif')
+    fps = kwargs.pop('fps', 20)
+    iterproduct = kwargs.pop('iterproduct', False)
+    clims = kwargs.pop('clims', [None,None])
+    climfactors = kwargs.pop('climfactors', [0,1])
+    cmap = kwargs.pop('cmap', None)
+    eo = kwargs.pop('eo', 1)
+    snaps = kwargs.pop('snaps', None)
+    
+    combos = combineArguments(iterproduct, sim=sim, q=q, axis=axis, project=project, i=i, iSlice=iSlice, log10=log10, climfactors=climfactors, clims=clims, cmap=cmap)
+    combos = [np.array(combo, dtype=object) for combo in combos]
+    Qs = list(set([Q[combo[1]] for combo in combos]))
+    snaps = np.arange(0, combos[0][0].Nout, eo) if snaps is None else snaps[::eo]
+    
+    clims = []
+    for c in range(len(combos)):
+        
+        print(f"Computing color limits for plot {c+1} ({combos[c][0].dir}, {Q[combos[c][1]]})...")
+        
+        if combos[c][-2]==[None,None] or combos[c][-2]==[]:
+            _sim, _q, _axis, _project, _i, _iSlice, _log10, _climfactors, _1, _2 = combos[c]
+            data = _sim.get(_q, snaps=snaps, axis=_axis, project=_project, i=_i, iSlice=_iSlice, log10=_log10)
+            clims.append(getColorLimits(data, _climfactors))
+        else:
+            clims.append(combos[c][-2])
+    
+    fig, ax = plt.subplots(1, len(combos), figsize=kwargs.pop('figsize', (4*len(combos),4)), dpi=dpi)
+    if not hasattr(ax, '__len__'): ax = [ax]
+    fig.subplots_adjust(wspace=wspace)
+    colorbarmade = False
+    
+    def animate(j):
+        
+        if j%10==0: print("Animating frame {}... ({:.2%})".format(j+1, (j+1)/len(snaps)))
+        
+        nonlocal colorbarmade
+        
+        [ax[k].clear() for k in range(len(ax))]
+        
+        s = [combo[0].snaps[snaps[j]] for combo in combos]
+        plot2d(s, q, axis=axis, project=project, i=i, iSlice=iSlice, log10=log10, ax=ax, colorbar=(not colorbarmade), clims=clims, **kwargs)
+        colorbarmade = True
+        
+        return
+    
+    anim = ani.FuncAnimation(fig, animate, frames=len(snaps))
+    writer = ani.PillowWriter(fps=fps)
+    
+    if save: 
+        if filename is None:
+            if len(Qs)==1: Qs = Qs[0]
+            filename = f"{Qs} Evolution Movie"
+        dirname = createImageSubfolders(parent=saveToParent, mkdir=False, folders=[], mkcomparisons=True)[0]
+        path = os.path.join(dirname, filename + ext)
+        anim.save(path, writer=writer)
+    
+    return
+
+
+
+def diff2d(snap1, snap2, q, ratio=False, axis=1, project=False, i=None, iSlice=None, log10=False, ax=None, **kwargs):
+    
+    """
+    Plots the difference or ratio of a quantity defined throughout the box between two snapshots.
+    - snap1, snap2: Snap objects
+    - q: name of quantity
+    - ratio: plot the difference normalized by q in snap2
+    - index kwargs (axis, project, i, iSlice): specify index of multi-dimensional quantity
+    - log10: return log (base 10) of quantity
+    - ax: axes on which to plot
+    """
+    
+    assert (snap1.N == snap2.N) and (snap1.dx == snap2.dx), "Snapshots must have equal resolution."
+    assert iSlice != 'max', "Max-valued slices are not equal, in general."
+    
+    dpi = kwargs.pop('dpi', 200)
+    zoom = kwargs.pop('zoom', [0,snap1.N,0,snap1.N])
+    save = kwargs.pop('save', False)
+    ext = kwargs.pop('ext', '.pdf')
+    filename = kwargs.pop('filename', None)
+    climfactors = kwargs.pop('climfactors', [0,1])
+    clims = kwargs.pop('clims', None)
+    cmap = kwargs.pop('cmap', 'bone')
+    colorbar = kwargs.pop('colorbar', True)
+    title = kwargs.pop('title', None)
+    colorscale = kwargs.pop('colorscale', 'linear')
+    absolute = kwargs.pop('absolute', False)
+    
+    if log10 and ratio and colorscale=='linear':
+        if (input("Did you want the colorbar on a log scale? ('y' or 'n')\n") == 'y'): 
+            colorscale, log10, absolute = 'log', False, True
+        else:
+            raise Exception("Ratio of logs is not physically meaningful.")
+    
+    if ax is None: fig, ax = plt.subplots(dpi=dpi)
+    
+    q1 = snap1.get(q, axis=axis, project=project, i=i, iSlice=iSlice, log10=log10)
+    q2 = snap2.get(q, axis=axis, project=project, i=i, iSlice=iSlice, log10=log10)
+    data = q1 - q2
+    if ratio: data = data/q2
+    if absolute or colorscale=='log': data = np.abs(data)
+    
+    if isinstance(axis, str): axis = "xyz".find(axis)
+    if iSlice is None: iSlice = int(snap1.N/2)-1
+    assert len(np.shape(data))==2, f"Requested data is not 2-dimensional (shape {np.shape(data)})."
+    
+    data = data[zoom[0]:zoom[1], zoom[2]:zoom[3]]
+    extent = kwargs.pop('extent', np.array([zoom[2], zoom[3], zoom[1], zoom[0]])*snap1.dx)
+    if clims is None: clims = getColorLimits(data, climfactors)
+    norm = mpl.colors.LogNorm(vmin=clims[0], vmax=clims[1]) if colorscale=='log' else None
+    
+    im = ax.imshow(data, extent=extent, cmap=cmap, norm=norm, **kwargs)
+    axes = ['yz', 'zx', 'xy'][axis]
+    ax.set(xlabel=rf"${axes[0]}$ [kpc]", ylabel=rf"${axes[1]}$ [kpc]")
+    if title is None: 
+        title_f15 = r"($f_{15}$" + rf"$ = ({snap1.f15}, {snap2.f15})$, "
+        title_slice = ("" if project else rf"${'xyz'[axis]} = {np.round((iSlice+0.5)*snap1.dx,2)}$, ")
+        title_t = rf"$t = ({np.round(snap1.t,3)}, {np.round(snap2.t,3)})$)"
+        title = title_f15 + title_slice + title_t
+    ax.set_title(title)
+    
+    if colorbar is True:
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.set_label(("Ratio" if ratio else "Difference") + " of " + log10*r'$\log_{10}($' + Q[q] + log10*')' + f" {U.get(U.get(q), '')}")
+    
+    suptitle = (absolute or colorscale=='log')*"Absolute " + ("Ratio" if ratio else "Difference") + " of" + log10*" Log" + f" {Q[q]} Values"
+    plt.suptitle(suptitle)
+    
+    if save:
+        if filename is None: filename = suptitle
+        dirname = createImageSubfolders(parent=saveToParent, mkdir=False, folders=[], mkcomparisons=True)[0]
+        path = os.path.join(dirname, filename + ext)
+        plt.savefig(path, transparent=True)
+    
+    return data
+
+
+
+def differencePlot(sim1, sim2, q, ratio=False, i=None, log10=False, ax=None, **kwargs):
+    
+    """
+    Plots the evolution of the difference or ratio of a quantity extracted from two different simulations.
+    - sim1, sim2: Sim objects
+    - q: name of quantity
+    - ratio: plot the difference normalized by q in sim2
+    - i: specifies index of multidimensional quantity
+    - log10: return log (base 10) of quantity
+    - ax: axes on which to plot
+    """
+    
+    assert not isinstance(q, list), "Plot one quantity at a time."
+    
+    figsize = kwargs.pop('figsize', (9,3))
+    dpi = kwargs.pop('dpi', 200)
+    yscale = kwargs.pop('yscale', 'linear')
+    save = kwargs.pop('save', True)
+    filename = kwargs.pop('filename', None)
+    ext = kwargs.pop('ext', '.pdf')
+    eo = kwargs.pop('eo', 1)
+    snaps = kwargs.pop('snaps', None)
+    smooth = kwargs.pop('smooth', None)
+    
+    t1, t2 = (sim1.t, sim2.t) if snaps is None else (sim1.t[snaps], sim2.t[snaps])
+    assert np.array_equal(np.round(t1,3), np.round(t2,3)), "Different time arrays."
+    t = t1[::eo]
+    if snaps is None: snaps = np.arange(0, sim1.Nout, eo)
+    q1 = sim1.get(q, snaps=snaps, i=i, log10=log10)
+    q2 = sim2.get(q, snaps=snaps, i=i, log10=log10)
+    
+    if ax is None:
+        plt.figure(figsize=figsize, dpi=dpi)
+        ax = plt.gca()
+    
+    data = q1 - q2
+    if ratio: data = data/q2
+    if isinstance(smooth, int): data = SMA(data, smooth)
+    if yscale == 'log': data = np.abs(data)
+    ax.plot(t, data, **kwargs)
+    ylabel = ratio*"Normalized " + f"Difference: {Q[q]}"
+    title = r"($f_{15} = $" + rf"${sim1.f15}$, ${sim2.f15}$)"
+    ax.set(xlabel=f"Time {U['time']}", ylabel=ylabel, title=title, yscale=yscale)
+    plt.grid(True)
+    
+    if save: 
+        if filename is None: filename = Q[q] + ratio*" Normalized" + " Difference Plot"
+        dirname = createImageSubfolders(parent=saveToParent, mkdir=False, folders=[], mkcomparisons=True)[0]
+        path = os.path.join(dirname, filename + ext)
+        plt.savefig(path, transparent=True)
+    
+    return t, data
+
+
+
+def differenceMovie(sim1, sim2, q, ratio=False, axis=1, project=False, i=None, iSlice=None, log10=False, ax=None, **kwargs):
+    
+    """
+    Animates the evolution of the difference (or ratio) between the same quantity from different simulations.
+    - sim1, sim2: Sim objects
+    - q: name of quantity
+    - ratio: plot the difference normalized by q in sim2
+    - index kwargs (axis, project, i, iSlice): specify index of multi-dimensional quantity
+    - log10: return log (base 10) of quantity
+    - ax: axes on which to plot
+    """
+    
+    dpi = kwargs.pop('dpi', 200)
+    save = kwargs.pop('save', True)
+    filename = kwargs.pop('filename', None)
+    ext = kwargs.pop('ext', '.gif')
+    fps = kwargs.pop('fps', 20)
+    eo = kwargs.pop('eo', 1)
+    
+    assert (sim1.N == sim2.N) and (sim1.dx == sim2.dx), "Simulations must have equal resolution."
+    assert np.array_equal(np.round(sim1.t,3), np.round(sim2.t,3)), "Simulation snapshots must have identical timestamps."
+    
+    snaps = kwargs.pop('snaps', np.arange(0,sim1.Nout,eo))
+    
+    fig, ax = plt.subplots(dpi=dpi)
+    colorbarmade = False
+    
+    def animate(j):
+        
+        if j%10==0: print("Animating frame {}... ({:.2%})".format(j+1, (j+1)/len(snaps)))
+        
+        nonlocal colorbarmade
+        
+        ax.clear()
+        
+        snap1, snap2 = sim1.snaps[snaps[j]], sim2.snaps[snaps[j]]
+        diff2d(snap1, snap2, q, ratio=ratio, axis=axis, project=project, i=i, iSlice=iSlice, log10=log10, ax=ax, colorbar=(not colorbarmade), **kwargs)
+        colorbarmade = True
+        
+        return
+    
+    anim = ani.FuncAnimation(fig, animate, frames=len(snaps))
+    writer = ani.PillowWriter(fps=fps)
+        
+    if save: 
+        if filename is None: filename = f"{Q[q]} Difference Movie"
+        dirname = createImageSubfolders(parent=saveToParent, mkdir=False, folders=[], mkcomparisons=True)[0]
+        path = os.path.join(dirname, filename + ext)
+        anim.save(path, writer=writer)
+    
+    return
 
 
 
@@ -1739,12 +2090,11 @@ def evolutionComparison(snapdir, q, i=None, log10=False, ax=None, **kwargs):
 
 
 
+"""
+BACKGROUND PROCESSES
 
-
-
-
-
-## Handles folder checks and subfolder creation.
+- Handles subfolder creation.
+"""
 
 
 
