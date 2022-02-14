@@ -2,7 +2,7 @@
 SIFDM Data Interpretations
 
 - Created by Connor Painter on 9/27/21 to do elementary analysis on the outputs of SIFDM MATLAB code by Philip Mocz.
-- Last updated: 01/17/22
+- Last updated: 02/14/22
 """
 
 
@@ -18,6 +18,7 @@ import itertools
 from scipy.optimize import curve_fit
 from scipy.interpolate import UnivariateSpline
 from scipy.signal import find_peaks
+from scipy.integrate import quad
 mpl.rcParams['mathtext.fontset'] = 'stix'
 mpl.rcParams['font.family'] = 'STIXGeneral'
 
@@ -43,24 +44,30 @@ FOLDER SETUP
 
 
 
-## f15 = 2.75; L = 20; T = 16; Nout = 10; N (res) = 100
-d2_75 = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/f2.75L20T16n1600r100"
-
 ## f15 = Inf.; L = 20; T = 16 Nout = 1600; N (res) = 100
 dInf = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/fInfL20T16n1600r100"
+
+## f15 = Inf.; L = 20; T = 4 Nout = 40; N (res) = 400
+dInfHD = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/fInfL20T4n40r400"
 
 ## f15 = 4.00; L = 20; T = 16; Nout = 1600; N (res) = 100
 d4 = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/f4L20T16n1600r100"
 
+## f15 = 2.75; L = 20; T = 16; Nout = 10; N (res) = 100
+d2_75 = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/f2.75L20T16n1600r100"
+
 ## f15 = 2.00; L = 20; T = 16; Nout = 1600; N (res) = 100
 d2 = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/f2L20T16n1600r100"
+
+## f15 = 2.00; L = 20; T = 4; Nout = 40; N (res) = 400
+d2HD = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/f2L20T4n40r400"
 
 ## f15 = 1.00; L = 20; T = 16; Nout = 1600; N (res) = 100
 d1 = r"/Users/cap/Documents/UT/Research (Boylan-Kolchin)/SIFDM Project/sifdm-matlab-main/output/f1L20T16n1600r100"
 
 
 
-folders = [dInf, d4, d2_75, d2, d1]
+folders = [dInf, d4, d2_75, d2, d1, dInfHD, d2HD]
 
 
 
@@ -119,15 +126,20 @@ Q = {'':'',
      'rhoMax':'Maximum Density',
      'iMax':'Maximum Density Index',
      'profile':'Density Profile',
-     'rho0':'Soliton Central Density Fit', 
+     'fitdict':'Dictionary of Profile Parameter Fits',
+     'rho0':'Soliton Central Density', 
      'delta':'Density Profile Delta Factor',
-     'solitonGOF':'Goodness of Fit to Soliton Profile',
-     'beta':'Beta (Soliton Stability Parameter)',
-     'r_c':'Soliton Core Radius', 
-     'M_sol':'Soliton Mass', 
+     'r_c':'Soliton Core Radius',
+     'cutoff':'Soliton-Tail Density Cutoff',
+     'M_sol':'Soliton Mass',
      'crit_f15':'Critical Self-interaction Parameter',
-     'tailindex':'Density Profile Tail Index Fit',
+     'beta':'Beta (Soliton Stability Parameter)',
+     'n':'Density Profile Tail Index',
+     'n_tail':'Density Profile Tail Index Limit',
+     'A_tail':'Density Profile Tail Amplitude Fit',
+     'solitonGOF':'Goodness of Fit to Soliton Profile',
      'tailGOF':'Goodness of Fit to Density Profile Tail',
+     'profileGOF':'Goodness of Fit to Entire Density Profile',
      'V':'Potential', 
      'v':'Madelung Velocity', 
      'v2':'Madelung Velocity Magnitude Squared', 
@@ -171,7 +183,8 @@ LTX = {'psi':r"$\Psi$",
        'r_c':r"$r_c$",
        'M_sol':r"$M_{\mathrm{sol}}$",
        'crit_f15':r"$f_{\mathrm{crit}}$",
-       'tailindex':r"$n_{\mathrm{tail}}$",
+       'n_tail':r"$n_{\mathrm{tail}}$",
+       'A_tail':r"$A_{\mathrm{tail}}$",
        'V':r"$V$",
        'v':r"$v$",
        'v2':r"$v^2$",
@@ -214,17 +227,20 @@ class Sim():
     Extracts and calculates data from all snapshots in a folder.
     - snapdir: path to output directory
     - lite: do not load psi at initialization
+    - store: store data in snaps when computed
     """
     
-    def __init__(self, snapdir, lite=True):
+    def __init__(self, snapdir, lite=True, store=True):
         
         self.snapdir = snapdir
         self.dir = os.path.basename(snapdir)
+        self.lite = lite
+        self.store = store
         
         print(f"Loading {lite*'(lite) '}Snap objects from folder {self.dir}...")
         
         self.snaps = [Snap(snapdir, i, lite=lite) for i in range(len(list(os.scandir(snapdir))))]
-        self.t = np.array([s.t for s in self.snaps])
+        self.t = [s.t for s in self.snaps]
         self.Nout = len(self.snaps)
         
         s = self.snaps[0]
@@ -263,7 +279,7 @@ class Sim():
             
             if j%50==0: print("Retrieving {} from Snap {} ({:.2%})...".format(Q[q], snaps[j], j/len(snaps)))
             
-            s = self.snaps[snaps[j]]
+            s = self.snaps[snaps[j]] if self.store else Snap(self.snapdir, snaps[j])
             data.append(s.get(q, axis, project, i, iSlice, log10, **kwargs))
         
         return np.array(data)
@@ -565,6 +581,8 @@ class Snap():
         
         self.snapdir = snapdir
         self.num = snapnum
+        self.lite = lite
+        self.loadall = loadall
         self.filename = "snap{snapnum:04d}.h5".format(snapnum=snapnum)          
         snappath = os.path.join(snapdir, self.filename)
         f = h5py.File(snappath, 'r')
@@ -577,30 +595,38 @@ class Snap():
         self.m = self.m22 * 8.96215327e-89
         self.f15 = float(self.dir[self.dir.find('f')+1:self.dir.find('L')])
         self.f = self.f15 * 8.05478166e-32
-        self.a_s = formula('a_s', m=self.m, f=self.f)                  
+        self.a_s = _a_s(self.f, self.m)                  
         self.Lbox = float(f['Lbox'][0])
         self.N = int(self.dir[self.dir.find('r')+1:])
         self.dx = self.Lbox/self.N
         
-        self.crit_M_sol = (formula('crit_M_sol', m=self.m, a_s=self.a_s) if self.a_s != 0 else np.inf)
-        self.crit_rho0 = formula('crit_rho0', m22=self.m22, f15=self.f15)
-        self.crit_r_c = formula('crit_r_c', m22=self.m22, f15=self.f15)
-        self.crit_beta = 0.3
+        self.crit_M_sol = (_crit_M_sol(self.a_s, self.m) if self.a_s != 0 else np.inf)
+        self.crit_rho0 = _crit_rho0(self.f15, self.m22)
+        self.crit_r_c = _crit_r_c(self.f15, self.m22)
+        self.crit_beta = _crit_beta()
         
-        self.all_loaded = loadall
         if loadall:
             self.phase = np.angle(self.psi)
             self.rho = np.abs(self.psi)**2
             self.rhobar = np.mean(self.rho)
-            self.profile = self.densityProfile()
-            self.rho0, self.delta, self.solitonGOF = self.fitSolitonProfile()
             self.rhoMax = np.max(self.rho)
             self.iMax = np.array(np.unravel_index(np.argmax(self.rho), self.rho.shape))
-            self.beta = formula('beta', m22=self.m22, f=self.f, rho0=self.rho0)
-            self.r_c = formula('r_c', m22=self.m22, rho0=self.rho0, delta=self.delta)
-            self.M_sol = formula('M_sol', rho0=self.rho0, r_c=self.r_c)
-            self.crit_f15 = formula('crit_f15', m22=self.m22, rho0=self.rho0, delta=self.delta)
-            self.tailindex, self.tailGOF = self.fitTailProfile(plot=False)
+            self.profile = self.densityProfile()
+            self.fitdict = self.fitProfile()
+            self.rho0 = self.fitdict['rho0']
+            self.delta = self.fitdict['delta']
+            self.r_c = self.fitdict['r_c']
+            self.cutoff = self.fitdict['cutoff']
+            self.M_sol = self.fitdict['M_sol']
+            self.crit_f15 = _crit_f15(self.M_sol, self.m)
+            self.beta = self.fitdict['beta']
+            self.n = self.fitdict['n']
+            self.n_tail = self.fitdict['n_tail']
+            self.A_tail = self.fitdict['A_tail']
+            self.r_tail = self.fitdict['r_tail']
+            self.solitonGOF = self.fitdict['solitonGOF']
+            self.tailGOF = self.fitdict['tailGOF']
+            self.profileGOF = self.fitdict['profileGOF']
             
             ## Get the potential.
             k = (2*pi/self.Lbox) * np.arange(-self.N/2, self.N/2)
@@ -757,58 +783,95 @@ class Snap():
             except:
                 self.profile = self.densityProfile(**kwargs)
                 data = self.profile
+        if q=='fitdict':
+            try: data = self.fitdict
+            except:
+                self.fitdict = self.fitProfile()
+                data = self.fitdict
         if q=='rho0':
             try: data = self.rho0
             except:
-                self.rho0, self.delta, self.solitonGOF = self.fitSolitonProfile()
+                fitdict = self.get('fitdict')
+                self.rho0 = fitdict['rho0']
                 data = self.rho0
         if q=='delta':
             try: data = self.delta
             except:
-                self.rho0, self.delta, self.solitonGOF = self.fitSolitonProfile()
+                fitdict = self.get('fitdict')
+                self.delta = fitdict['delta']
                 data = self.delta
-        if q=='solitonGOF':
-            try: data = self.solitonGOF
-            except:
-                self.rho0, self.delta, self.solitonGOF = self.fitSolitonProfile()
-                data = self.solitonGOF
-        if q=='beta':
-            try: data = self.beta
-            except:
-                rho0 = self.get('rho0')
-                self.beta = 1.6e-12/(self.m22)*rho0**(1/2) * hbar*c**5/(32*pi*G*self.f**2)
-                data = self.beta
         if q=='r_c':
             try: data = self.r_c
             except:
-                rho0 = self.get('rho0')
-                delta = self.get('delta')
-                self.r_c = formula('r_c', m22=self.m22, rho0=rho0, delta=delta)
+                fitdict = self.get('fitdict')
+                self.r_c = fitdict['r_c']
                 data = self.r_c
+        if q=='cutoff':
+            try: data = self.cutoff
+            except:
+                fitdict = self.get('fitdict')
+                self.cutoff = fitdict['cutoff']
+                data = self.cutoff
         if q=='M_sol':
             try: data = self.M_sol
             except:
-                rho0 = self.get('rho0')
-                r_c = self.get('r_c')
-                self.M_sol = 11.6*rho0*r_c**3
+                fitdict = self.get('fitdict')
+                self.M_sol = fitdict['M_sol']
                 data = self.M_sol
         if q=='crit_f15':
             try: data = self.crit_f15
             except:
-                rho0 = self.get('rho0')
-                delta = self.get('delta')
-                self.crit_f15 = formula('crit_f15', m22=self.m22, rho0=rho0, delta=delta)
+                M_sol = self.get('M_sol')
+                self.crit_f15 = _crit_f15(M_sol, m=self.m)
                 data = self.crit_f15
-        if q=='tailindex':
-            try: data = self.tailindex
+        if q=='beta':
+            try: data = self.beta
             except:
-                self.tailindex, self.tailGOF = self.fitTailProfile()
-                data = self.tailindex
+                fitdict = self.get('fitdict')
+                self.beta = fitdict['beta']
+                data = self.beta
+        if q=='n':
+            try: data = self.n
+            except:
+                fitdict = self.get('fitdict')
+                self.n = fitdict['n']
+                data = self.n
+        if q=='n_tail':
+            try: data = self.n_tail
+            except:
+                fitdict = self.get('fitdict')
+                self.n_tail = fitdict['n_tail']
+                data = self.n_tail
+        if q=='A_tail':
+            try: data = self.A_tail
+            except:
+                fitdict = self.get('fitdict')
+                self.A_tail = fitdict['A_tail']
+                data = self.A_tail
+        if q=='r_tail':
+            try: data = self.r_tail
+            except:
+                fitdict = self.get('fitdict')
+                self.r_tail = fitdict['r_tail']
+                data = self.r_tail
+        if q=='solitonGOF':
+            try: data = self.solitonGOF
+            except:
+                fitdict = self.get('fitdict')
+                self.solitonGOF = fitdict['solitonGOF']
+                data = self.solitonGOF
         if q=='tailGOF':
             try: data = self.tailGOF
             except:
-                self.tailindex, self.tailGOF = self.fitTailProfile()
+                fitdict = self.get('fitdict')
+                self.tailGOF = fitdict['tailGOF']
                 data = self.tailGOF
+        if q=='profileGOF':
+            try: data = self.profileGOF
+            except:
+                fitdict = self.get('fitdict')
+                self.profileGOF = fitdict['profileGOF']
+                data = self.profileGOF
         if q=='V':
             try: data = self.V if full else self.V[index]
             except:
@@ -997,7 +1060,7 @@ class Snap():
         iterproduct = kwargs.pop('iterproduct', False)
         cmap = kwargs.pop('cmap', None)
         
-        combos = combineArguments(iterproduct, q, axis, project, i, iSlice, log10, climfactors, clims, cmap)
+        combos = combineArguments(iterproduct, q=q, axis=axis, project=project, i=i, iSlice=iSlice, log10=log10, climfactors=climfactors, clims=clims, cmap=cmap)
         combos = [np.array(combo, dtype=object) for combo in combos]
         Qs = list(set([Q[combo[0]] for combo in combos]))
         
@@ -1138,6 +1201,7 @@ class Snap():
         filename = kwargs.pop('filename', "Density Profile")
         interpkws = kwargs.pop('interpkws', {'k':5, 's':0.02, 'ext':1})
         legendkws = kwargs.pop('legendkws', {'loc':3, 'fontsize':'x-small'})
+        components = kwargs.pop('components', False)
         
         rho, iMax, rho0, r_c = self.get('rho'), self.get('iMax'), None, None
         if normalize or fit: rho0, r_c = self.get('rho0'), self.get('r_c')
@@ -1151,7 +1215,7 @@ class Snap():
         if recalculate or not standard:
             
             iC = np.array([int(self.N/2)-1]*3)
-            x_ = (np.arange(100)+0.5)*self.dx
+            x_ = (np.arange(self.N)+0.5)*self.dx
             x, y, z = np.meshgrid(x_, x_, x_)
             xC, yC, zC = x_[iC]
             rho = np.roll(rho, list(iC-iMax), axis=np.arange(3))
@@ -1161,9 +1225,8 @@ class Snap():
             mN = np.ravel(rho[iN, iN, iN]*self.dx**3)
             coords = np.array([np.ravel(x) for x in np.meshgrid(xN, xN, xN)])
             xCM, yCM, zCM = np.sum(mN*coords, axis=1)/np.sum(mN)
-            #offset = np.sqrt((xC-xCM)**2 + (yC-yCM)**2 + (zC-zCM)**2)
             
-            if rmin is None: rmin = 1e-2#offset/2
+            if rmin is None: rmin = 1e-2
             elif normalize: rmin = rmin*r_c
             if rmax is None: rmax = self.Lbox/2
             elif normalize: rmax = rmax*r_c
@@ -1181,7 +1244,7 @@ class Snap():
                 random_coords = random_coords * r_for_randoms
                 random_coords = np.array([random_coords[0]+xCM, random_coords[1]+yCM, random_coords[2]+zCM])
                 random_i = np.int32(np.round(random_coords/self.dx-0.5))
-                random_i[random_i >= 100] = 99
+                random_i[random_i >= self.N] = self.N-1
                 rho_r[i] = np.mean(rho[random_i[0], random_i[1], random_i[2]])
             
             if normalize: rho_r, mids = rho_r/rho0, mids/r_c
@@ -1211,12 +1274,19 @@ class Snap():
             if fit:
                 
                 r_fit = np.logspace(np.log10(lims[0]/2), np.log10(lims[1]*2), 100)
-                rho_fit = formula('soliton', r=r_fit, s=self, normalize=normalize)
+                fd = self.get('fitdict')
+                sol_fit, tail_fit, rho_fit = None, None, None
+                rho_fit = self.theoreticalProfile(r_fit)
+                label=r'Profile Fit ($\rho_0 = {:.1e}$, $\delta = {:.3}$, $n = {:.3}$)'.format(fd['rho0'], fd['delta'], fd['n'])
+                ax.loglog(r_fit, rho_fit, c='goldenrod',label=label)
                 
-                ax.loglog(r_fit, rho_fit, c='goldenrod',
-                          label=r'Soliton Fit ($\rho_0 = {:.1e}$, $\delta = {:.4}$, $\psi^2 = {:.2e}$)'.format(self.rho0, self.delta, self.solitonGOF))
+                if components:
+                    sol_fit, tail_fit, rho_fit = self.theoreticalProfile(r_fit, components=True)
+                    ax.loglog(r_fit, sol_fit, 'b', label=r'Soliton Component ($r_c = {:.3}$, $M = {:.1e}$, $\beta = {:.3}$)'.format(fd['r_c'], fd['M_sol'], fd['beta']), alpha=0.2)
+                    ax.loglog(r_fit, tail_fit, 'r', label=r'Tail Component ($A_t = {:.1e}$, $r_t = {:.3}$, $n_t = {:.3}$)'.format(fd['A_tail'], fd['r_tail'], fd['n_tail']), alpha=0.2)
                 
-                plt.vlines((3.5 if normalize else 3.5*r_c), lims[2], lims[3], linestyles='dashed', label=r"Theoretical Universal Cutoff ($3.5r_c$)", color="rosybrown")
+                cutoff = self.get('cutoff')
+                plt.vlines((cutoff if normalize else cutoff*r_c), lims[2], lims[3], linestyles='dashed', label=r"Observed Cutoff ({:.4}$r_c$)".format(cutoff), color="rosybrown")
             
             ax.grid()
             plt.legend(**legendkws)
@@ -1227,99 +1297,94 @@ class Snap():
     
     
     
-    def fitSolitonProfile(self, rmin=None, rmax=None, shells=20, plot=False, ax=None, **kwargs):
+    def theoreticalProfile(self, r, rho0=None, delta=None, A_tail=None, n_tail=None, r_tail=None, components=False):
         
-        """
-        Fits the soliton density profile to eq. (6) in sifdm_notes.
-        NOTE: Free parameter 'delta' compensates for fluctuations about the ground state.
-        - rmin, rmax, shells: radial domain in which to fit and resolution
-        - plot: show raw data with fit
-        - ax: axes on which to plot
-        """
+        if rho0 is None: rho0 = self.get('rho0')
+        if delta is None: delta = self.get('delta')
+        if A_tail is None: A_tail = self.get('A_tail')
+        if n_tail is None: n_tail = self.get('n_tail')
+        if r_tail is None: r_tail = self.get('r_tail')
+        b = _beta(rho0, self.f, self.m22)
+        r_c = _r_c(rho0, delta, self.m22)
         
-        dpi = kwargs.pop('dpi', 200)
-        bounds = kwargs.pop('bounds', ([0,5e-1], [100,2]))
+        if not hasattr(r, '__len__'): r = np.array([r])
         
-        if rmin is None or rmax is None:
-            r_start, r_end = self.solitonConfidenceInterval()
-            if rmin is None: rmin = r_start
-            if rmax is None: rmax = r_end
+        soliton = _rho_sol(r, rho0-A_tail, r_c, b, delta, self.m22)
+        tail = _rho_tail(r, r_tail, A_tail, n_tail)
         
-        def log10SolitonDensity(log10r, log10rho0, delta):
-            
-            rho0 = 10**log10rho0
-            b = formula('beta', m22=self.m22, f=self.f, rho0=rho0)
-            r_c = formula('r_c', m22=self.m22, rho0=rho0, delta=delta)
-            i1 = np.tanh(b/5)
-            i2 = np.tanh(b)
-            i3 = np.tanh(np.sqrt(b))**2
-            
-            return log10rho0 + np.log10((1 + (1+2.60*i1) * 0.091*((10**log10r/r_c)*np.sqrt(1+b))**(2-i2/5))**(-8+22/5*i3))
+        return (soliton, tail, soliton + tail) if components else soliton + tail
         
-        log10r = np.linspace(np.log10(rmin), np.log10(rmax), shells)
-        r = 10**log10r
-        profile = self.get('profile')
-        log10rho = profile(log10r)
-        rho = 10**log10rho              
-        fit = None
-        try: 
-            fit = curve_fit(log10SolitonDensity, log10r, log10rho, p0=(np.log10(self.rhoMax),1), bounds=bounds, **kwargs)                 
-        except:
-            return np.repeat(np.nan, 3)
-        rho0_fit, delta_fit = 10**fit[0][0], fit[0][1]
-        rho_fit = 10**log10SolitonDensity(log10r, np.log10(rho0_fit), delta_fit)
-        goodness = 1/shells * np.sum(np.array(np.log(rho) - np.log(rho_fit))**2)
-        
-        if plot:
-            if ax is None: fig, ax = plt.subplots(dpi=dpi)
-            ax.loglog(r, rho, 'o-', label="Measured Density")
-            
-            r_fit = np.linspace(rmin, rmax, 100)
-            rho_fit = 10**log10SolitonDensity(np.log10(r_fit), np.log10(rho0_fit), delta_fit)
-            ax.loglog(r_fit, rho_fit, 'k', label=r"$\rho_0 = {:.4e}\ (\delta = {:.4})$".format(rho0_fit, delta_fit))
-        
-            ax.set_xlabel(r"$r$ " + U['length'])
-            ax.set_ylabel(r"$\rho(r)$ " + U['density'])
-            ax.set_title(r"($f_{15}$" + rf"$ = {self.f15}$, $t = {np.round(self.t,3)}$)")
-            ax.grid()
-            plt.legend()
-        
-        return rho0_fit, delta_fit, goodness
     
     
-    
-    def fitTailProfile(self, rmin=1, rmax=8, shells=20, plot=False, ax=None, **kwargs):
+    def fitProfile(self, rmin=None, rmax=None, shells=200, plot=False, ax=None, **kwargs):
         
         """
-        Fits the density profile tail to a power law.
-        - rmin, rmax, shells: radial domain in which to fit and resolution
-        - plot: show raw data with fit
+        Fits observed density profile with a soliton curve and a cored power-law tail simultaneously.
+        - rmin, rmax, shells: radial domain and resolution
+        - plot: show plot with computation
         - ax: axes on which to plot
         """
         
         dpi = kwargs.pop('dpi', 200)
         save = kwargs.pop('save', False)
-        filename = kwargs.pop('filename', "Density Profile Tail")
+        filename = kwargs.pop('filename', "Density Profile Fit")
+        p0 = kwargs.pop('p0', [10,1,7,-2,0.1])
+        bounds = kwargs.pop('bounds', ([6,0.5,0,-4,1e-2], [15,2,14,4,1]))
+        curve_fit_kwargs = kwargs.pop('curve_fit_kwargs', {})
         
-        def log10PowerLaw(log10r, log10A, n): return log10A + n*log10r
+        def log10TheoreticalProfile(log10r, log10rho0, delta, log10A, n_tail, r_tail, return_cutoff=False):
+            
+            rho0 = 10**log10rho0
+            b = _beta(rho0, self.f, self.m22)
+            r_c = _r_c(rho0, delta, self.m22)
+            i1 = np.tanh(b/5)
+            i2 = np.tanh(b)
+            i3 = np.tanh(np.sqrt(b))**2
+            
+            soliton = np.log10(10**log10rho0 - 10**log10A) + np.log10((1 + (1+2.60*i1) * 0.091*((10**log10r/r_c)*np.sqrt(1+b))**(2-i2/5))**(-8+22/5*i3))
+            #tail = log10A + n*log10r
+            tail = log10A + n_tail/2*np.log10((10**log10r/r_tail)**2 + 1)
+            
+            if return_cutoff: return np.argmin(np.abs(tail - soliton - 1/2))
+            
+            return np.log10(10**soliton + 10**tail)
         
+        if rmin is None: rmin = self.dx*3/2
+        if rmax is None: rmax = 4/5*self.Lbox/2
         log10r = np.linspace(np.log10(rmin), np.log10(rmax), shells)
         r = 10**log10r
         profile = self.get('profile')
         log10rho = profile(log10r)
         rho = 10**log10rho
-        fit = curve_fit(log10PowerLaw, log10r, log10rho, p0=[0,-3])
-        log10A_fit, n_fit = fit[0]
-        rho_fit = 10**log10PowerLaw(log10r, log10A_fit, n_fit)
-        goodness = 1/shells * np.sum(np.array(np.log(rho) - np.log(rho_fit))**2)
+        fit = curve_fit(log10TheoreticalProfile, log10r, log10rho, p0=p0, bounds=bounds, **curve_fit_kwargs)
+        
+        log10rho0FIT, deltaFIT, log10AFIT, n_tailFIT, r_tailFIT = fit[0]
+        rho0FIT, AFIT = np.power(10, [log10rho0FIT, log10AFIT])
+        r_cFIT = _r_c(rho0FIT, deltaFIT, self.m22)
+        betaFIT = _beta(rho0FIT, self.f, self.m22)
+        M_solFIT = _M_sol(rho0FIT, r_cFIT, betaFIT, deltaFIT, self.m22)
+        
+        rhoFIT = 10**log10TheoreticalProfile(log10r, *fit[0])
+        profileGOF = GOF(rho, rhoFIT)
+        i_cutoff = log10TheoreticalProfile(log10r, *fit[0], return_cutoff=True)
+        cutoff = r[i_cutoff]/r_cFIT
+        solitonGOF, tailGOF = np.nan, profileGOF
+        if i_cutoff!=0:
+            solitonGOF = GOF(rho[:i_cutoff], rhoFIT[:i_cutoff])
+            tailGOF = GOF(rho[i_cutoff:], rhoFIT[i_cutoff:])
+        n = _n(np.mean([cutoff*r_cFIT, self.Lbox]), r_tailFIT, n_tailFIT)
+        
+        fitdict = {'rho0':rho0FIT, 'delta':deltaFIT, 'r_c':r_cFIT, 'cutoff':cutoff, 'M_sol':M_solFIT, 'crit_f15':None, 'beta':betaFIT, 'n':n, 'n_tail':n_tailFIT, 'A_tail':AFIT, 'r_tail':r_tailFIT,
+                   'solitonGOF':solitonGOF, 'tailGOF':tailGOF, 'profileGOF':profileGOF}    
         
         if plot:
             if ax is None: fig, ax = plt.subplots(dpi=dpi)
             ax.loglog(r, rho, 'k.', label="Measured Density", **kwargs)
             
-            r_fit = np.linspace(rmin, rmax, 100)
-            rho_fit = 10**(log10PowerLaw(np.log10(r_fit), log10A_fit, n_fit))
-            ax.loglog(r_fit, rho_fit, 'goldenrod', label=f"$n = {np.round(n_fit,4)}$")
+            rFIT = np.logspace(np.log10(rmin), np.log10(rmax), 100)
+            rhoFIT = 10**(log10TheoreticalProfile(np.log10(rFIT), *fit[0]))
+            label = r"Fit: $\rho_0 = {:.3e}$, $\delta = {:.3}$, $n = {:.3}$".format(10**log10rho0FIT, deltaFIT, n)
+            ax.loglog(rFIT, rhoFIT, 'goldenrod', label=label)
             
             ax.set_xlabel(rf"$r$ {U['length']}")
             ax.set_ylabel(rf"$\rho(r)$ {U['density']}")
@@ -1327,66 +1392,9 @@ class Snap():
             ax.grid()
             plt.legend()
         
-        if save: plt.savefig(self.getPathAndName(filename, ".pdf"), transparent=True)    
+        if save: plt.savefig(self.getPathAndName(filename, ".pdf"), transparent=True)
         
-        return n_fit, goodness
-    
-    
-    
-    def solitonConfidenceInterval(self, rmin=None, rmax=None, shells=200, plot=False, details=False, **kwargs):
-        
-        """
-        Estimates a radial domain in which the density profile resembles a soliton.
-        Domain should lie between artifacts of resolution and universal cutoff.
-        - rmin, rmax, shells: radial domain of search and resolution
-        - plot: display confidence interval with data
-        - details: include concavity extrema and estimated fit on plot
-        """
-        
-        nobreak_for = kwargs.pop('nobreak_for', 0.03)
-        dv8_factor = kwargs.pop('dv8_factor', 2)
-        
-        profile = self.get('profile')
-        if rmin is None: rmin = 1e-2
-        if rmax is None: rmax = self.Lbox/2
-        r = np.logspace(np.log10(rmin), np.log10(rmax), shells)
-        
-        convex, _ = find_peaks(profile(np.log10(r), nu=2), height=0)
-        concave, _ = find_peaks(-profile(np.log10(r), nu=2), height=0)
-        
-        ## r_start is the closest peak in negative concavity to 1.5 times the grid spacing.
-        r_start = r[concave][np.argmin(np.abs( np.log10(r[concave]/(self.dx*1.5)) ))]
-        
-        ## r_end is the closest peak in positive convexity to the point at which a fit to 
-        ## data near r_start deviates from the profile by a factor of 2.
-        rho0_est, delta_est, _ = self.fitSolitonProfile(r_start, r_start+nobreak_for)
-        beta_est = formula('beta', m22=self.m22, f=self.f, rho0=rho0_est)
-        r_breaking = np.logspace(np.log10(r_start), 1, 100)
-        rho_est_theory = formula('soliton', r=r_breaking, s=self, rho0=rho0_est, delta=delta_est, beta=beta_est)
-        rho_est_measured = 10**profile(np.log10(r_breaking))
-        r_end = r_breaking[np.argmin(np.abs(rho_est_measured/rho_est_theory - dv8_factor))]
-        r_end = r[convex][np.argmin(np.abs(np.log10(r_end) - np.log10(r[convex])))]
-        
-        if plot or details:
-            fig, ax = plt.subplots(dpi=200)
-            ax.loglog(r, 10**profile(np.log10(r)), 'k', label="Density Profile")
-            ylim = ax.get_ylim()
-            plt.vlines([r_start, r_end], *ylim, colors='goldenrod', linestyles='dashed')
-            plt.fill_betweenx(ylim, r_start, r_end, color='goldenrod', alpha=0.2, label="Soliton Confidence Interval")
-            ax.set_xlabel(rf"$r$ {U['length']}")
-            ax.set_ylabel(rf"$\rho(r)$ {U['density']}")
-            ax.set_title(r"($f_{15}$" + rf"$ = {self.f15}$, $t = {np.round(self.t,3)}$)")
-            ax.grid()
-            
-            if details:
-                ax.plot(r_breaking, rho_est_theory, 'm.', label="Dummy Soliton Fit", markersize=1)
-                ax.plot(r[convex], 10**profile(np.log10(r[convex])), 'r*', label="Local Convexity Maxima")
-                ax.plot(r[concave], 10**profile(np.log10(r[concave])), 'g*', label="Local Concavity Maxima")
-            
-            ax.set(ylim=ylim)
-            plt.legend(fontsize='small')
-            
-        return (r_start, r_end)
+        return fitdict
     
     
     
@@ -1588,6 +1596,18 @@ def SMA(data, n):
 
 
 
+def GOF(data, fit):
+    
+    """
+    Goodness of fit metric between discrete arrays of data and fitted values.
+    - data: list of values
+    - fit: list of fit values (same length as data)
+    """
+    
+    return 1/len(data) * np.sum(np.array(np.log(data) - np.log(fit))**2)
+
+
+
 """
 FORMULAE
 
@@ -1596,105 +1616,68 @@ FORMULAE
 
 
 
-def formula(q, **kwvars):
+def _a_s(f, m=8.96215327e-89):
+    return hbar*c**3*m/(32*pi*f**2)
+
+def _f(a_s, m=8.96215327e-89, normalize=False):
+    return np.sqrt(hbar*c**3*m/(32*pi*a_s))/([1,8.05478166e-32][normalize])
+
+def _rho0(r_c, delta=1, m22=1):
+    return 1.9e7*delta*r_c**(-4)*m22**(-2)
+
+def _r_c(rho0, delta=1, m22=1):
+    return (rho0/(1.9e7*delta))**(-1/4)*(m22)**(-1/2)
+
+def _M_sol(rho0, r_c=None, beta=0, delta=1, m22=1):
+    if beta==0: 
+        if r_c is None: r_c = _r_c(rho0, 1, m22)
+        return 11.6*delta*rho0*r_c**3
+    else:
+        dMdr = lambda r, rho0, r_c, beta, delta, m22: _rho_sol(r, rho0, r_c, beta, delta, m22)*4*pi*r**2
+        return quad(dMdr, 0, np.inf, args=(rho0, r_c, beta, delta, m22))[0]
+
+def _beta(rho0, f, m22=1):
+    return 1.6e-12/m22 * rho0**(1/2) * hbar*c**5/(32*pi*G*f**2)
+
+def _rho_sol(r, rho0, r_c=None, beta=0, delta=1, m22=1):
     
-    """
-    Catalog of formulae or observed relations between quantities.
-    - q: quantity to compute
-    - kwvars: other variables in q-specific formula
-    - NOTE: supply Snap object as keyword 's' to automatically extract variables
-    """
+    if r_c is None: r_c = _r_c(rho0, delta, m22)
     
-    if len(kwvars)==0: raise TypeError("Must supply keyword variables.")
+    i1 = np.tanh(beta/5)
+    i2 = np.tanh(beta)
+    i3 = np.tanh(np.sqrt(beta))**2
     
-    s = kwvars.get('s')
-    if q=='a_s':
-        m = kwvars.get('m') if 'm' in kwvars else s.get('m')
-        f = kwvars.get('f') if 'f' in kwvars else s.get('f')
-        return hbar*c**3*m/(32*pi*f**2)
-    if q=='crit_M_sol': 
-        m = kwvars.get('m') if 'm' in kwvars else s.get('m')
-        a_s = kwvars.get('a_s') if 'a_s' in kwvars else s.get('a_s')
-        return hbar/np.sqrt(G*m*a_s)
-    if q=='crit_rho0': 
-        m22 = kwvars.get('m22') if 'm22' in kwvars else s.get('m22')
-        f15 = kwvars.get('f15') if 'f15' in kwvars else s.get('f15')
-        return 1.2e9*m22**2*f15**4
-    if q=='crit_r_c':
-        m22 = kwvars.get('m22') if 'm22' in kwvars else s.get('m22')
-        f15 = kwvars.get('f15') if 'f15' in kwvars else s.get('f15')
-        return 0.18/(m22*f15)
-    if q=='crit_f15':
-        m22 = kwvars.get('m22') if 'm22' in kwvars else s.get('m22')
-        rho0 = kwvars.get('rho0') if 'rho0' in kwvars else s.get('rho0')
-        delta = kwvars.get('delta') if 'delta' in kwvars else s.get('delta')
-        return delta**(3/4)*(rho0/1.2e9)**(1/4) * m22**(-1/2)
-    if q=='beta': 
-        m22 = kwvars.get('m22') if 'm22' in kwvars else s.get('m22')
-        f = kwvars.get('f') if 'f' in kwvars else s.get('f')
-        rho0 = kwvars.get('rho0') if 'rho0' in kwvars else s.get('rho0')
-        return 1.6e-12/m22 * rho0**(1/2) * hbar*c**5/(32*pi*G*f**2)
-    if q=='r_c':
-        m22 = kwvars.get('m22') if 'm22' in kwvars else s.get('m22')
-        rho0 = kwvars.get('rho0') if 'rho0' in kwvars else s.get('rho0')
-        delta = kwvars.get('delta') if 'delta' in kwvars else s.get('delta')
-        return (rho0/(1.9e7*delta))**(-1/4)*(m22)**(-1/2)
-    if q=='rho0':
-        m22 = kwvars.get('m22') if 'm22' in kwvars else s.get('m22')
-        r_c = kwvars.get('r_c') if 'r_c' in kwvars else s.get('r_c')
-        delta = kwvars.get('delta') if 'delta' in kwvars else s.get('delta')
-        return 1.9e7*delta*r_c**(-4)*m22**(-2)
-    if q=='M_sol': 
-        rho0 = kwvars.get('rho0') if 'rho0' in kwvars else s.get('rho0')
-        r_c = kwvars.get('r_c') if 'r_c' in kwvars else s.get('r_c')
-        return 11.6*rho0*r_c**3
-    if q=='soliton':
-        r = kwvars.get('r', np.logspace(-2,1))
-        normalize = kwvars.get('normalize', False)
-        m22 = kwvars.get('m22', 1)
-        rho0 = kwvars.get('rho0')
-        r_c = kwvars.get('r_c')
-        delta = kwvars.get('delta', 1)
-        beta = kwvars.get('beta', 0)
-        
-        if not normalize:
-            try:
-                if not 's' in kwvars:
-                    if not 'rho0' in kwvars: 
-                        rho0 = formula('rho0', m22=m22, r_c=r_c, delta=delta)
-                    if not 'r_c' in kwvars: 
-                        print('here')
-                        r_c = formula('r_c', m22=m22, rho0=rho0, delta=delta)
-                else:
-                    if not 'delta' in kwvars:
-                        delta = s.get('delta')
-                    if not 'rho0' in kwvars:
-                        rho0 = s.get('rho0')
-                    if not 'r_c' in kwvars:
-                        r_c = formula('r_c', m22=s.m22, rho0=rho0, delta=delta)
-                    if not 'beta' in kwvars:
-                        beta = s.get('beta')
-            except:
-                normalize = True
-        elif s is not None:
-            beta = s.get('beta')
-                
-        i1 = np.tanh(beta/5)
-        i2 = np.tanh(beta)
-        i3 = np.tanh(np.sqrt(beta))**2
-        
-        if not normalize: r = r/r_c
-        
-        rho = (1 + (1+2.60*i1) * 0.091 * (r*np.sqrt(1+beta))**(2-i2/5))**(-8+22/5*i3)
-        
-        if not normalize: rho = rho*rho0
-        
-        return rho
-        
-    
-    raise KeyError("Requested formula is not yet supported.")
-    
-    return
+    return rho0*(1 + (1+2.60*i1) * 0.091*((r/r_c)*np.sqrt(1+beta))**(2-i2/5))**(-8+22/5*i3)
+
+def _rho_tail(r, r_tail, A, n):
+    return A*((r/r_tail)**2 + 1)**(n/2)
+
+def _n(r, r_tail, n_tail):
+    return n_tail*(r/r_tail)**2 / (1 + (r/r_tail)**2)
+
+def _crit_M_sol(a_s, m=8.96215327e-89):
+    return 1.012*hbar/np.sqrt(G*m*a_s)
+
+def _crit_rho0(f15, m22=1):
+    return 1.2e9*m22**2*f15**4
+
+def _crit_r_c(f15, m22=1):
+    return 0.18/(m22*f15)
+
+def _crit_beta():
+    return 0.3
+
+def _crit_a_s(M_sol, m=8.96215327e-89):
+    return 1/(G*m)*(M_sol/(1.012*hbar))**(-2)
+
+def _crit_f15(M_sol, m=8.96215327e-89):
+    return _f(_crit_a_s(M_sol, m), normalize=True)
+
+def _v_c(r_c, m=8.96215327e-89):
+    return 2*pi/7.5*hbar/(m*r_c)
+
+def _nu(rho0):
+    return 10.94*(rho0/1e9)**(1/2)
 
 
 
